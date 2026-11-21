@@ -44,7 +44,7 @@ def test_status_shows_budget_and_disabled(tmp_path):
     out = status_report(db, s, NOW)
     assert "Watching: 3 streams" in out
     assert "ready: 1" in out
-    assert "youtube: posted 1/6 in the last 24h" in out
+    assert "youtube: posted 1 of" in out and "planned today" in out
     assert "tiktok: PAUSED" in out and "login expired" in out
     assert "instagram: off" in out
     assert "tiktok login problem" in out

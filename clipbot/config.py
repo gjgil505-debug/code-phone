@@ -39,10 +39,17 @@ class Settings:
     freshness_hours: int = 6
     keep_days: int = 7
     quiet_hours: str | None = None
+    active_hours: str | None = "10:00-23:00"  # only post inside these local hours, like a person would
+    min_gap_min: int = 45            # minimum time between two posts on the same platform
+    stagger_min: int = 10            # minimum time between posts on different platforms
+    retry_after_fail_min: int = 30   # wait this long after a failed upload before trying again
     timezone: str | None = None  # IANA name for quiet hours; None = system local
     youtube_privacy: str = "public"
     graph_api_version: str = "v21.0"
     budgets: dict[str, int] = field(default_factory=lambda: {"youtube": 6, "tiktok": 10, "instagram": 20})
+    # Posts per day, picked at random each day from this range (always capped by `budgets`).
+    daily_posts: dict[str, tuple[int, int]] = field(
+        default_factory=lambda: {"youtube": (2, 4), "tiktok": (3, 6), "instagram": (2, 5)})
     enabled: dict[str, bool] = field(default_factory=lambda: {p: False for p in PLATFORMS})
     facecams: dict[str, tuple[int, int, int, int]] = field(default_factory=dict)
     emotes: dict[str, list[str]] = field(default_factory=lambda: {k: list(v) for k, v in DEFAULT_EMOTES.items()})
@@ -95,6 +102,10 @@ def load_settings(config_path: Path | None, env: Mapping[str, str]) -> Settings:
         if k in ("budgets", "enabled"):
             merged = dict(getattr(base, k))
             merged.update(v or {})
+            kw[k] = merged
+        elif k == "daily_posts":
+            merged = dict(base.daily_posts)
+            merged.update({p: (int(r[0]), int(r[1])) for p, r in (v or {}).items()})
             kw[k] = merged
         elif k == "emotes":
             merged = {c: list(e) for c, e in base.emotes.items()}

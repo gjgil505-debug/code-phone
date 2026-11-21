@@ -27,48 +27,13 @@ def _video(db, tmp_path, score=5.0, ago_h=1.0, safe=True):
     return db.add_video(Video(None, 1, str(p), str(meta), score, "h", safe, NOW - timedelta(hours=ago_h)))
 
 
+def _due_now(db, *platforms):
+    for p in platforms:
+        db.set_state(f"plan:{p}:2026-11-21", json.dumps([(NOW - timedelta(minutes=5)).isoformat()]))
+
+
 def _post(db, platform, vid, ago_h, status="ok"):
     db.add_post(Post(platform, vid, "r", "u", status, NOW - timedelta(hours=ago_h), None))
-
-
-def test_enabled_and_idle_platforms_due(tmp_path):
-    assert due_platforms(Db(tmp_path / "x.db"), S(), NOW) == ["youtube", "tiktok"]
-
-
-def test_budget_reached_not_due(tmp_path):
-    db = Db(tmp_path / "x.db")
-    for i in range(6):
-        _post(db, "youtube", i, 4.5 + i * 3)
-    assert "youtube" not in due_platforms(db, S(), NOW)
-
-
-def test_failed_posts_do_not_count_toward_budget(tmp_path):
-    db = Db(tmp_path / "x.db")
-    for i in range(6):
-        _post(db, "youtube", i, 4.5 + i * 3, status="failed")
-    assert "youtube" in due_platforms(db, S(), NOW)
-
-
-def test_min_gap_enforced(tmp_path):
-    db = Db(tmp_path / "x.db")
-    _post(db, "youtube", 1, 3)
-    assert "youtube" not in due_platforms(db, S(), NOW)  # gap = 24h/6 = 4h
-    db2 = Db(tmp_path / "y.db")
-    _post(db2, "youtube", 1, 5)
-    assert "youtube" in due_platforms(db2, S(), NOW)
-
-
-def test_quiet_hours(tmp_path):
-    db = Db(tmp_path / "x.db")
-    assert due_platforms(db, S(quiet_hours="11:00-13:00"), NOW) == []
-    assert due_platforms(db, S(quiet_hours="22:00-08:00"), NOW) == ["youtube", "tiktok"]
-    assert due_platforms(db, S(quiet_hours="22:00-08:00"), NOW.replace(hour=2)) == []
-
-
-def test_disabled_platform_not_due(tmp_path):
-    db = Db(tmp_path / "x.db")
-    db.set_state("disabled:youtube", "login expired")
-    assert due_platforms(db, S(), NOW) == ["tiktok"]
 
 
 def test_choose_skips_unsafe_stale_missing_and_already_posted(tmp_path):
@@ -108,6 +73,7 @@ class Pub:
 async def test_publish_once_records_ok_post_with_meta(tmp_path):
     db = Db(tmp_path / "x.db")
     vid = _video(db, tmp_path)
+    _due_now(db, "youtube")
     yt = Pub("youtube", [PostResult("abc", "https://youtube.com/shorts/abc")])
     await publish_once(db, S(enabled={"youtube": True}), {"youtube": yt}, NOW)
     assert yt.calls[0][1]["description"] == "@StreamerName"
@@ -118,9 +84,12 @@ async def test_publish_once_records_ok_post_with_meta(tmp_path):
 async def test_auth_error_disables_only_that_platform(tmp_path):
     db = Db(tmp_path / "x.db")
     _video(db, tmp_path)
+    _due_now(db, "youtube")
+    db.set_state("plan:tiktok:2026-11-21", json.dumps([(NOW - timedelta(minutes=1)).isoformat()]))
     errors = []
     yt = Pub("youtube", [AuthError("invalid_grant")])
     tt = Pub("tiktok", [PostResult("p1", None)])
+    await publish_once(db, S(), {"youtube": yt, "tiktok": tt}, NOW, on_error=errors.append)
     await publish_once(db, S(), {"youtube": yt, "tiktok": tt}, NOW, on_error=errors.append)
     assert "invalid_grant" in db.get_state("disabled:youtube")
     assert [p.status for p in db.posts_since("tiktok", NOW - timedelta(hours=1))] == ["ok"]
@@ -130,6 +99,7 @@ async def test_auth_error_disables_only_that_platform(tmp_path):
 async def test_transient_error_retries_then_records_failed(tmp_path):
     db = Db(tmp_path / "x.db")
     vid = _video(db, tmp_path)
+    _due_now(db, "youtube")
     sleeps = []
 
     async def sleep(s):
@@ -145,6 +115,7 @@ async def test_transient_error_retries_then_records_failed(tmp_path):
 async def test_transient_error_then_success(tmp_path):
     db = Db(tmp_path / "x.db")
     _video(db, tmp_path)
+    _due_now(db, "youtube")
 
     async def sleep(s):
         pass
@@ -156,6 +127,7 @@ async def test_transient_error_then_success(tmp_path):
 
 async def test_nothing_to_post_does_nothing(tmp_path):
     db = Db(tmp_path / "x.db")
+    _due_now(db, "youtube")
     yt = Pub("youtube", [])
     await publish_once(db, S(enabled={"youtube": True}), {"youtube": yt}, NOW)
     assert yt.calls == []

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import shutil
 import subprocess
 import sys
@@ -35,11 +36,25 @@ def ytdlp_download(url: str, dest: Path) -> Path:
     return Path(out.strip().splitlines()[-1])
 
 
-def _metadata(m: Moment, hook_text: str) -> dict:
+DESCRIPTIONS = [
+    "{title}\n\nStreamer: @{name} - watch them live at twitch.tv/{login}",
+    "@{name} had chat going crazy with this one\n\nfull streams at twitch.tv/{login}",
+    "{title} | @{name}\n\ncatch {name} live on twitch.tv/{login}",
+    "this clip from @{name} though\n\ntwitch.tv/{login}",
+    "{title}\n\nclip: @{name} (twitch.tv/{login})",
+    "chat lost it at this @{name} moment\n\nlive at twitch.tv/{login}",
+]
+EXTRA_TAGS = ["#GTAVI", "#gta", "#gaming", "#shorts", "#fyp", "#twitch", "#gta6clips", "#rockstargames"]
+
+
+def _metadata(m: Moment, hook_text: str, rng: random.Random | None = None) -> dict:
+    """Title/description/hashtags, worded a little differently each time so posts don't look templated."""
+    rng = rng or random.Random()
     title = hook_text.title()
-    hashtags = ["#GTA6", "#GTAVI", f"#{m.channel}", "#gaming", "#shorts"]
-    description = (f"{title}\n\nStreamer: @{m.display_name} - watch them live at twitch.tv/{m.channel}\n"
-                   f"Original clip: {m.clip_url}\n\n" + " ".join(hashtags))
+    hashtags = ["#GTA6", f"#{m.channel}", *rng.sample(EXTRA_TAGS, rng.randint(2, 4))]
+    rng.shuffle(hashtags)
+    description = (rng.choice(DESCRIPTIONS).format(title=title, name=m.display_name, login=m.channel)
+                   + "\n\n" + " ".join(hashtags))
     return {"streamer": m.channel, "display_name": m.display_name, "clip_url": m.clip_url,
             "trigger_type": m.trigger_type, "score": m.score, "hook_text": hook_text, "title": title,
             "description": description, "hashtags": hashtags}

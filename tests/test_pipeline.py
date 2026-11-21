@@ -41,7 +41,7 @@ async def test_render_end_to_end(tmp_path, make_clip):
     assert v.path.endswith("2026-11-21/1234_streamer.mp4")
     meta = json.loads(open(v.meta_path).read())
     assert "@StreamerName" in meta["description"] and "twitch.tv/streamer" in meta["description"]
-    assert meta["hashtags"][:2] == ["#GTA6", "#GTAVI"] and "#streamer" in meta["hashtags"]
+    assert "#GTA6" in meta["hashtags"] and "#streamer" in meta["hashtags"]
     assert meta["display_name"] == "StreamerName" and meta["hook_text"]
     assert v.safe is True and db.get_moment(m.id).status == "rendered"
     assert not downloaded[0].exists()

@@ -17,7 +17,7 @@ from clipbot.housekeeping import cleanup
 from clipbot.hype import ChatMessage, HypeDetector, Trigger
 from clipbot.oauth import TokenStore
 from clipbot.publish.instagram import InstagramPublisher
-from clipbot.publish.planner import in_quiet_hours, publish_once
+from clipbot.publish.planner import _platform_status, in_quiet_hours, publish_once
 from clipbot.publish.tiktok import TikTokPublisher
 from clipbot.publish.youtube import YouTubePublisher
 from clipbot.render.pipeline import render_moment
@@ -74,10 +74,11 @@ def status_report(db: Db, s: Settings, now: datetime) -> str:
         elif disabled:
             lines.append(f"  {p}: PAUSED - {disabled} (fix with `clipbot auth {p}`)")
         else:
-            ok = [x for x in db.posts_since(p, now - timedelta(hours=24)) if x.status == "ok"]
+            plan, done, next_at = _platform_status(db, s, p, now)
             failed = [x for x in db.posts_since(p, now - timedelta(hours=24)) if x.status == "failed"]
-            lines.append(f"  {p}: posted {len(ok)}/{s.budgets.get(p, 0)} in the last 24h"
-                         + (f", {len(failed)} failed" if failed else ""))
+            nxt = f", next around {next_at.strftime('%H:%M')}" if next_at else ", done for today"
+            lines.append(f"  {p}: posted {done} of {len(plan)} planned today{nxt}"
+                         + (f", {len(failed)} failed in 24h" if failed else ""))
     errs = json.loads(db.get_state("last_errors") or "[]")[-5:]
     lines.append("Recent problems:" + ("" if errs else " none"))
     lines += [f"  {e}" for e in errs]

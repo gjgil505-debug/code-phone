@@ -197,6 +197,22 @@ Python 3.11, single asyncio process, SQLite for state. Components:
 - `clipbot render <clip_url>` renders a single clip by hand (useful for testing
   the look).
 
+### 11. Human-like posting (added 2026-11-21 at the user's request)
+
+The user asked for the bot to post well under the maximum and not on a visible schedule, so
+accounts look run by a person and don't get banned.
+
+- Each local day, every platform picks a random number of posts from `daily_posts`
+  (YouTube 2–4, TikTok 3–6, Instagram 2–5). This is always capped by `budgets`, which stay as a
+  hard 24-hour safety cap.
+- The day's post times are random inside `active_hours` (default 10:00–23:00 local), at least
+  `min_gap_min` (45) apart. They are made once per day and saved in SQLite, so a restart keeps them.
+- Only one platform posts at a time, with at least `stagger_min` (10) minutes between any two posts.
+- After a failed upload, that platform waits `retry_after_fail_min` (30) minutes.
+- Descriptions are picked from several wordings, and hashtags are a random subset in random order.
+  They always include `#GTA6`, `#<login>`, `@<DisplayName>` and `twitch.tv/<login>`.
+- This replaces the even spacing (24 h ÷ budget) in section 9.
+
 ## Testing
 
 - Unit tests:

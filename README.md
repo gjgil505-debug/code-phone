@@ -2,7 +2,8 @@
 
 clipbot watches the 25 biggest live GTA 6 streams on Twitch and reads their chat. When a chat suddenly
 explodes, it makes a Twitch clip of the moment. Every 10 minutes it turns the best moment into a vertical
-short, and it posts the best of those to YouTube Shorts, TikTok and Instagram Reels by itself.
+short, and it posts the best of those to YouTube Shorts, TikTok and Instagram Reels by itself, at
+random, human-looking times.
 
 Every video has:
 
@@ -130,7 +131,7 @@ Pick the option that matches your computer:
 ### 9. Now and then
 - Run `clipbot status`. It shows:
   - the streams being watched and the hype moments found
-  - posts per platform today, and anything paused
+  - posts per platform today and roughly when the next one goes out, plus anything paused
   - recent problems
 - If a platform shows **PAUSED**, its login broke. Run `clipbot auth <platform>` and posting resumes.
 - Finished videos are kept for 7 days in `output/`, then deleted (setting: `keep_days`).
@@ -148,11 +149,14 @@ Pick the option that matches your computer:
   in total.
 - **Every 10 minutes:** the strongest moment of that window becomes a video. If nothing was strong
   enough, it skips the slot instead of making filler.
-- **Posting:**
-  - Each platform has a daily limit: YouTube 6, TikTok 10, Instagram 20. Posts are spread evenly
-    through the day.
-  - The highest-scoring unposted video from the last 6 hours is posted.
-  - You can set `quiet_hours` to stop it posting overnight.
+- **Posting like a person, not a bot:**
+  - Each day, every platform gets a random number of posts, well under its limits: YouTube 2–4,
+    TikTok 3–6, Instagram 2–5.
+  - Posts go out at random times between 10am and 11pm your time, at least 45 minutes apart.
+  - Two platforms never post within 10 minutes of each other.
+  - Captions and hashtags are worded a little differently every time.
+  - Hard caps of 6 / 10 / 20 posts in any 24 hours stay in place as a safety net.
+  - Each post uses the highest-scoring unposted video from the last 6 hours.
 - **Word filter:** if the captions contain a slur, the video is kept but never posted. Edit the list
   with `blocklist:` in `config.yaml`.
 - **Failures:** each platform runs on its own. If one login expires, only that platform pauses.

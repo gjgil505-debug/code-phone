@@ -29,12 +29,22 @@ enabled:
   youtube: false
   tiktok: false
   instagram: false
-budgets:                  # max posts per 24 hours, spread evenly
+# Posting is made to look like a person doing it: a different number of posts each day,
+# at random times during waking hours, never two platforms at once.
+daily_posts:              # each day picks a random number in this range
+  youtube: [2, 4]
+  tiktok: [3, 6]
+  instagram: [2, 5]
+active_hours: "10:00-23:00"  # only post between these times (your local time)
+min_gap_min: 45           # at least this long between posts on the same platform
+stagger_min: 10           # at least this long between posts on different platforms
+retry_after_fail_min: 30  # after a failed upload, wait this long before trying again
+budgets:                  # hard safety cap: never more than this many posts in any 24 hours
   youtube: 6
   tiktok: 10
   instagram: 20
 freshness_hours: 6        # only post videos made in the last 6 hours
-quiet_hours: null         # e.g. "03:00-08:00" to not post overnight
+quiet_hours: null         # extra no-post window, e.g. "13:00-14:00"
 timezone: null            # e.g. "America/New_York" for quiet_hours; null = this computer's time
 youtube_privacy: public
 graph_api_version: v21.0
