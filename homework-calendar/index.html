@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>My Homework</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script type="module" src="src/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1>My Homework</h1>
+    <div class="top-buttons" id="top-buttons" hidden>
+      <button type="button" id="refresh" class="btn ghost">↻ Refresh</button>
+      <button type="button" id="add-btn" class="btn primary">+ Add</button>
+    </div>
+  </header>
+
+  <p id="status" class="status" role="status" aria-live="polite" hidden></p>
+
+  <section id="signin" class="signin" hidden>
+    <p class="hello">Your homework, tests and activities in one place.</p>
+    <p id="setup-msg" class="setup-msg" hidden>This app isn't set up yet. See SETUP.md.</p>
+    <button type="button" id="signin-btn" class="btn big">Sign in with Google</button>
+    <p id="signin-hint" class="hint" hidden>If Google said 'Access blocked', your school blocked this app. Ask a parent to contact the school's IT.</p>
+    <p><a href="?demo=1" class="demo-link">Try with sample data</a></p>
+  </section>
+
+  <main id="app" hidden>
+    <p id="demo-note" class="demo-note" hidden>Sample data. Nothing is saved. <a href="./">Sign in for real</a></p>
+
+    <section id="next" class="card" aria-labelledby="next-h">
+      <h2 id="next-h">What's next</h2>
+      <div id="next-body"></div>
+    </section>
+
+    <section id="week" class="card" aria-labelledby="week-h">
+      <div class="week-head">
+        <h2 id="week-h">This week</h2>
+        <div class="week-nav">
+          <button type="button" id="prev-week" class="btn round" aria-label="Previous week">◀</button>
+          <span id="week-label" class="week-label"></span>
+          <button type="button" id="next-week" class="btn round" aria-label="Next week">▶</button>
+        </div>
+      </div>
+      <div id="week-body" class="week-days"></div>
+    </section>
+
+    <section id="checklist" class="card" aria-labelledby="checklist-h">
+      <h2 id="checklist-h">Checklist</h2>
+      <div id="checklist-body"></div>
+    </section>
+  </main>
+
+  <dialog id="add" aria-labelledby="add-h">
+    <form id="add-form" novalidate>
+      <h2 id="add-h">Add something</h2>
+      <fieldset class="kinds">
+        <legend>What</legend>
+        <label><input type="radio" name="kind" value="activity" checked> Activity</label>
+        <label><input type="radio" name="kind" value="test"> Test</label>
+        <label><input type="radio" name="kind" value="homework"> Other homework</label>
+      </fieldset>
+      <label class="field">Name
+        <input type="text" id="add-title" name="title" autocomplete="off" maxlength="100">
+      </label>
+      <div class="field-row">
+        <label class="field">Date
+          <input type="date" id="add-date" name="date">
+        </label>
+        <label class="field">Time (optional)
+          <input type="time" id="add-time" name="time">
+        </label>
+      </div>
+      <label class="check-field" id="add-repeat-field"><input type="checkbox" id="add-repeat" name="repeatWeekly"> Every week</label>
+      <p id="add-error" class="form-error" role="alert"></p>
+      <div class="dialog-buttons">
+        <button type="button" id="add-delete" class="btn danger" hidden>Delete</button>
+        <span class="spacer"></span>
+        <button type="button" id="add-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" id="add-save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pick-date" aria-labelledby="pick-date-h">
+    <form id="pick-date-form" novalidate>
+      <h2 id="pick-date-h">When is the test?</h2>
+      <p id="pick-date-what" class="pick-what"></p>
+      <label class="field">Date
+        <input type="date" id="pick-date-input" name="date">
+      </label>
+      <p id="pick-date-error" class="form-error" role="alert"></p>
+      <div class="dialog-buttons">
+        <span class="spacer"></span>
+        <button type="button" id="pick-date-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" id="pick-date-save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
