@@ -36,6 +36,8 @@ class TikTokPublisher:
         r = await self.client.post(f"{TT}/v2/oauth/token/", data={
             "client_key": self.s.tiktok_client_key, "client_secret": self.s.tiktok_client_secret,
             "grant_type": "refresh_token", "refresh_token": tok.get("refresh_token", "")})
+        if r.status_code >= 500 or r.status_code == 429:
+            raise RuntimeError(f"TikTok token service unavailable ({r.status_code}); will retry")
         if r.status_code != 200 or "access_token" not in r.json():
             raise AuthError(f"TikTok login expired ({r.text[:200]}); run `clipbot auth tiktok`")
         new = r.json()

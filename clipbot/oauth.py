@@ -52,7 +52,7 @@ SCOPES = {
     "twitch": "clips:edit",
     "youtube": "https://www.googleapis.com/auth/youtube.upload",
     "tiktok": "user.info.basic,video.publish",
-    "instagram": "instagram_basic,instagram_content_publish,pages_show_list,business_management",
+    "instagram": "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management",
 }
 
 

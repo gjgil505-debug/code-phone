@@ -137,3 +137,13 @@ def test_choose_never_posts_manual_test_renders(tmp_path):
     db = Db(tmp_path / "x.db")
     _video(db, tmp_path, score=0.0)  # `clipbot render` creates score-0 videos
     assert choose_video(db, "youtube", S(), NOW) is None
+
+
+def test_failed_video_not_retried_on_same_platform(tmp_path):
+    """A failed or ambiguous upload is never re-sent to that platform (no poison video, no double post)."""
+    db = Db(tmp_path / "x.db")
+    bad = _video(db, tmp_path, score=9)
+    other = _video(db, tmp_path, score=5)
+    _post(db, "youtube", bad, 0.5, status="failed")
+    assert choose_video(db, "youtube", S(), NOW).id == other
+    assert choose_video(db, "tiktok", S(), NOW).id == bad

@@ -23,12 +23,6 @@ def test_pick_highest_in_window(tmp_path):
     assert db.get_moment(other).status == "skipped"
 
 
-def test_ignores_older_than_window(tmp_path):
-    db = Db(tmp_path / "x.db")
-    _add(db, 9.0, ago_min=11)
-    assert pick_winner(db, Settings(), NOW) is None
-
-
 def test_below_min_score_returns_none_and_skips(tmp_path):
     db = Db(tmp_path / "x.db")
     mid = _add(db, 3.2)
@@ -38,3 +32,15 @@ def test_below_min_score_returns_none_and_skips(tmp_path):
 
 def test_empty_window_returns_none(tmp_path):
     assert pick_winner(Db(tmp_path / "x.db"), Settings(), NOW) is None
+
+
+def test_moment_that_became_ready_after_last_pick_is_still_considered(tmp_path):
+    db = Db(tmp_path / "x.db")
+    mid = _add(db, 6.0, ago_min=15)  # was still pending when the previous pick ran, or a render ran long
+    assert pick_winner(db, Settings(), NOW).id == mid
+
+
+def test_ignores_moments_older_than_two_windows(tmp_path):
+    db = Db(tmp_path / "x.db")
+    _add(db, 9.0, ago_min=21)
+    assert pick_winner(db, Settings(), NOW) is None

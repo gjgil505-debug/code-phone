@@ -28,7 +28,8 @@ class InstagramPublisher:
         except ValueError:
             body = {}
         err = body.get("error") if isinstance(body, dict) else None
-        if err and (err.get("code") == 190 or err.get("type") == "OAuthException" and r.status_code in (400, 401)):
+        # Only token problems mean "log in again"; Meta labels almost every error OAuthException.
+        if err and (err.get("code") in (102, 190) or err.get("error_subcode") in (458, 459, 460, 463, 464, 467)):
             raise AuthError(f"Instagram login invalid ({err.get('message')}); run `clipbot auth instagram`")
         if r.status_code != 200:
             raise RuntimeError(f"Instagram {what} failed {r.status_code}: {r.text[:300]}")

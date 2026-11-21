@@ -8,7 +8,9 @@ from clipbot.db import Db, Moment
 
 
 def pick_winner(db: Db, settings: Settings, now: datetime) -> Moment | None:
-    moments = db.ready_moments(now - timedelta(minutes=settings.render_interval_min))
+    # Look back two windows: moments still being clipped at the last pick, or created while a render ran,
+    # get their turn. Each moment is decided once (rendered/skipped), so nothing is picked twice.
+    moments = db.ready_moments(now - timedelta(minutes=2 * settings.render_interval_min))
     if not moments:
         return None
     best = max(moments, key=lambda m: m.score)

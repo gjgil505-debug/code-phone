@@ -25,6 +25,8 @@ class YouTubePublisher:
         r = await self.client.post(GOOGLE_TOKEN, data={
             "client_id": self.s.google_client_id, "client_secret": self.s.google_client_secret,
             "refresh_token": tok.get("refresh_token", ""), "grant_type": "refresh_token"})
+        if r.status_code >= 500 or r.status_code == 429:
+            raise RuntimeError(f"Google token service unavailable ({r.status_code}); will retry")
         if r.status_code != 200:
             raise AuthError(f"YouTube login expired ({r.text[:200]}); run `clipbot auth youtube`")
         tok["access_token"] = r.json()["access_token"]

@@ -40,10 +40,13 @@ def record_error(db: Db, msg: str, now: datetime | None = None) -> None:
 
 
 async def every(name: str, interval_s: float, body: Callable[[], Awaitable[None]], db: Db,
-                sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, iterations: int | None = None) -> None:
+                sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, iterations: int | None = None,
+                clock: Callable[[], float] = time.monotonic) -> None:
+    """Run `body` every `interval_s` on a fixed cadence (slow bodies don't push later runs back)."""
     n = 0
     while iterations is None or n < iterations:
         n += 1
+        started = clock()
         try:
             await body()
         except asyncio.CancelledError:
@@ -51,7 +54,7 @@ async def every(name: str, interval_s: float, body: Callable[[], Awaitable[None]
         except Exception as e:
             log.exception("%s loop error", name)
             record_error(db, f"{name}: {e}")
-        await sleep(interval_s)
+        await sleep(max(0.0, interval_s - (clock() - started)))
 
 
 def status_report(db: Db, s: Settings, now: datetime) -> str:

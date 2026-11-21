@@ -160,6 +160,10 @@ class Db:
         return {r["video_id"] for r in self._all(
             "SELECT video_id FROM posts WHERE platform=? AND status='ok'", (platform,))}
 
+    def attempted_video_ids(self, platform: str) -> set[int]:
+        """Videos already sent to a platform, whether the upload succeeded, failed or ended unclear."""
+        return {r["video_id"] for r in self._all("SELECT video_id FROM posts WHERE platform=?", (platform,))}
+
     # state
     def get_state(self, key: str) -> str | None:
         rows = self._all("SELECT value FROM state WHERE key=?", (key,))

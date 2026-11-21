@@ -7,7 +7,7 @@ from pathlib import Path
 from clipbot.render.peak import ProbeInfo
 
 W, H = 1080, 1920
-TAG_BOTTOM = H - 220          # streamer tag sits above the platforms' bottom UI
+TAG_BOTTOM = H - 420          # streamer tag sits above the platforms' bottom caption/button overlay
 CAPTION_BOTTOM = TAG_BOTTOM - 110
 HOOK_TOP = 220
 HOOK_SECONDS = 3.0
@@ -39,19 +39,19 @@ def build_ffmpeg_cmd(src: Path, out: Path, peak_s: float, info: ProbeInfo, hook_
     font = _esc(FONT_FILE)
     norm_v = f"fps={FPS},scale={info.width}:{info.height},setsar=1,format=yuv420p"
     norm_a = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo"
+    # Input 0 is the source seeked to the peak (cold open); input 1 is the whole source. Decoding twice
+    # instead of split+trim keeps ffmpeg from buffering every raw frame before the peak in RAM.
     parts = [
-        f"[0:v]split=2[va][vb]",
-        f"[va]trim=start={peak}:duration={COLD_OPEN},setpts=PTS-STARTPTS,{norm_v}[cold]",
+        f"[0:v]setpts=PTS-STARTPTS,{norm_v}[cold]",
         f"color=c=white:s={info.width}x{info.height}:r={FPS}:d={FLASH},fade=t=out:st=0:d={FLASH},"
         f"setsar=1,format=yuv420p[flash]",
-        f"[vb]setpts=PTS-STARTPTS,{norm_v}[full]",
+        f"[1:v]setpts=PTS-STARTPTS,{norm_v}[full]",
         f"anullsrc=r=48000:cl=stereo,atrim=duration={FLASH},{norm_a}[fa]",
     ]
     if info.has_audio:
         parts += [
-            "[0:a]asplit=2[xa][xb]",
-            f"[xa]atrim=start={peak}:duration={COLD_OPEN},asetpts=PTS-STARTPTS,{norm_a}[ca]",
-            f"[xb]asetpts=PTS-STARTPTS,{norm_a}[fulla]",
+            f"[0:a]asetpts=PTS-STARTPTS,{norm_a}[ca]",
+            f"[1:a]asetpts=PTS-STARTPTS,{norm_a}[fulla]",
         ]
     else:
         parts += [
@@ -93,7 +93,8 @@ def build_ffmpeg_cmd(src: Path, out: Path, peak_s: float, info: ProbeInfo, hook_
     parts.append(f"[base]{text}[vout]")
     parts.append("[a0]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
 
-    return ["ffmpeg", "-y", "-v", "error", "-i", str(src), "-filter_complex", ";".join(parts),
+    return ["ffmpeg", "-y", "-v", "error", "-ss", str(peak), "-t", str(COLD_OPEN), "-i", str(src), "-i", str(src),
+            "-filter_complex", ";".join(parts),
             "-map", "[vout]", "-map", "[aout]",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-r", str(FPS),
+            "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-maxrate", "20M", "-bufsize", "40M", "-pix_fmt", "yuv420p", "-r", str(FPS),
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(out)]

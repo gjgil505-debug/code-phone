@@ -30,7 +30,7 @@ def utcnow() -> datetime:
 
 def ytdlp_download(url: str, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
-    out = subprocess.run([sys.executable, "-m", "yt_dlp", "-q", "--no-warnings", "--no-playlist", "-f", "best",
+    out = subprocess.run([sys.executable, "-m", "yt_dlp", "-q", "--no-warnings", "--no-playlist", "-f", "best[width>=height]/best",
                           "-o", str(dest / "%(id)s.%(ext)s"), "--print", "after_move:filepath", url],
                          check=True, capture_output=True, text=True, timeout=300).stdout
     return Path(out.strip().splitlines()[-1])
@@ -47,14 +47,27 @@ DESCRIPTIONS = [
 EXTRA_TAGS = ["#GTAVI", "#gta", "#gaming", "#shorts", "#fyp", "#twitch", "#gta6clips", "#rockstargames"]
 
 
+KEEP_UPPER = {"GTA", "GTAVI", "W", "POV", "NPC", "NPCS", "RP"}
+
+
+def title_case(text: str) -> str:
+    return " ".join(w if w in KEEP_UPPER or any(c.isdigit() for c in w) else w.capitalize() for w in text.split())
+
+
+def screen_name(m: Moment) -> str:
+    """Name for on-video text: the display name if the font can draw it, otherwise the Twitch login."""
+    ok = all(ord(c) <= 0x024F or 0x0400 <= ord(c) <= 0x04FF for c in m.display_name)
+    return m.display_name if ok and m.display_name else m.channel
+
+
 def _metadata(m: Moment, hook_text: str, rng: random.Random | None = None) -> dict:
     """Title/description/hashtags, worded a little differently each time so posts don't look templated."""
     rng = rng or random.Random()
-    title = hook_text.title()
+    title = title_case(hook_text)
     hashtags = ["#GTA6", f"#{m.channel}", *rng.sample(EXTRA_TAGS, rng.randint(2, 4))]
     rng.shuffle(hashtags)
     description = (rng.choice(DESCRIPTIONS).format(title=title, name=m.display_name, login=m.channel)
-                   + "\n\n" + " ".join(hashtags))
+                   + (f"\nclip: {m.clip_url}" if m.clip_url else "") + "\n\n" + " ".join(hashtags))
     return {"streamer": m.channel, "display_name": m.display_name, "clip_url": m.clip_url,
             "trigger_type": m.trigger_type, "score": m.score, "hook_text": hook_text, "title": title,
             "description": description, "hashtags": hashtags}
@@ -80,11 +93,11 @@ def _render_sync(m: Moment, settings: Settings, db: Db, src: Path, work: Path,
         return None
     peak = find_peak(src, COLD_OPEN)
     words = transcriber(src)
-    hook_id, hook_text = HookPicker(DEFAULT_HOOKS, db.recent_hook_ids(10)).pick(m.trigger_type, m.display_name)
+    hook_id, hook_text = HookPicker(DEFAULT_HOOKS, db.recent_hook_ids(10)).pick(m.trigger_type, screen_name(m))
     ass = work / "subs.ass"
     ass.write_text(build_ass(words, COLD_OPEN + FLASH, caption_bottom_y=CAPTION_BOTTOM), encoding="utf-8")
     out = _out_path(settings, m, now)
-    cmd = build_ffmpeg_cmd(src, out, peak, info, hook_text, f"@{m.display_name}", ass,
+    cmd = build_ffmpeg_cmd(src, out, peak, info, hook_text, f"@{screen_name(m)}", ass,
                            settings.facecams.get(m.channel), work)
     subprocess.run(cmd, check=True, capture_output=True, timeout=900)
     meta_path = out.with_suffix(".json")

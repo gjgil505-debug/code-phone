@@ -221,7 +221,7 @@ async def test_instagram_expired_token_raises_auth_error(tmp_path):
     ("youtube", "accounts.google.com", "scope", "https://www.googleapis.com/auth/youtube.upload"),
     ("tiktok", "www.tiktok.com", "scope", "user.info.basic,video.publish"),
     ("instagram", "www.facebook.com", "scope",
-     "instagram_basic,instagram_content_publish,pages_show_list,business_management"),
+     "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management"),
 ])
 def test_oauth_builds_authorize_url_with_scopes(provider, host, scope_key, scope):
     url = urlparse(authorize_url(provider, S, "st8", "http://localhost:8765/callback"))
@@ -230,3 +230,38 @@ def test_oauth_builds_authorize_url_with_scopes(provider, host, scope_key, scope
     assert q[scope_key] == [scope] and q["state"] == ["st8"]
     assert q["redirect_uri"] == ["http://localhost:8765/callback"]
     assert q.get("client_id", q.get("client_key")) in (["tw"], ["g"], ["tk"], ["m"])
+
+
+@respx.mock
+async def test_youtube_token_endpoint_outage_is_not_auth_error(tmp_path):
+    respx.post(UPLOAD_URL).mock(return_value=httpx.Response(401))
+    respx.post(GOOGLE_TOKEN).mock(return_value=httpx.Response(503, text="backend error"))
+    pub = YouTubePublisher(S, _tokens(tmp_path, "youtube", {"access_token": "a", "refresh_token": "r"}),
+                           httpx.AsyncClient())
+    with pytest.raises(RuntimeError) as e:
+        await pub.publish(_video(tmp_path), META)
+    assert not isinstance(e.value, AuthError)
+
+
+@respx.mock
+async def test_tiktok_token_endpoint_outage_is_not_auth_error(tmp_path):
+    respx.post(f"{TT}/v2/post/publish/creator_info/query/").mock(return_value=httpx.Response(401, json={}))
+    respx.post(f"{TT}/v2/oauth/token/").mock(return_value=httpx.Response(500, text="oops"))
+    pub = TikTokPublisher(S, _tokens(tmp_path, "tiktok", {"access_token": "a", "refresh_token": "r"}),
+                          httpx.AsyncClient(), sleep=_nosleep)
+    with pytest.raises(RuntimeError) as e:
+        await pub.publish(_video(tmp_path), META)
+    assert not isinstance(e.value, AuthError)
+
+
+@respx.mock
+@pytest.mark.parametrize("code,msg", [(4, "Application request limit reached"), (100, "Invalid parameter")])
+async def test_instagram_non_token_oauth_exception_is_not_auth_error(tmp_path, code, msg):
+    v = Settings().graph_api_version
+    respx.post(f"{GRAPH}/{v}/IG1/media").mock(return_value=httpx.Response(
+        400, json={"error": {"type": "OAuthException", "code": code, "message": msg}}))
+    pub = InstagramPublisher(S, _tokens(tmp_path, "instagram", {"page_token": "pt", "ig_user_id": "IG1"}),
+                             httpx.AsyncClient(), sleep=_nosleep)
+    with pytest.raises(RuntimeError) as e:
+        await pub.publish(_video(tmp_path), META)
+    assert not isinstance(e.value, AuthError)

@@ -48,3 +48,20 @@ def test_status_shows_budget_and_disabled(tmp_path):
     assert "tiktok: PAUSED" in out and "login expired" in out
     assert "instagram: off" in out
     assert "tiktok login problem" in out
+
+
+async def test_every_keeps_fixed_cadence(tmp_path):
+    """A slow body (e.g. a 3-minute render) must not push the next run later."""
+    db = Db(tmp_path / "x.db")
+    clock = [0.0]
+    sleeps = []
+
+    async def body():
+        clock[0] += 180
+
+    async def sleep(s):
+        sleeps.append(s)
+        clock[0] += s
+
+    await every("render", 600, body, db, sleep=sleep, iterations=2, clock=lambda: clock[0])
+    assert sleeps == [420, 420]
