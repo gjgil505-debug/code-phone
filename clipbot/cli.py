@@ -40,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("auth", help="one-time login for a platform")
     a.add_argument("provider", choices=["twitch", *PLATFORMS])
     a.add_argument("--redirect-uri", default="http://localhost:8765/callback")
+    a.add_argument("--paste", action="store_true", default=None,
+                   help="paste the address your browser lands on (automatic over SSH)")
+    sub.add_parser("setup", help="enter your app keys and choose platforms, one question at a time")
     r = sub.add_parser("render", help="turn one Twitch clip URL into a short (to check the look)")
     r.add_argument("clip_url")
     r.add_argument("--name", default="StreamerName", help="streamer display name for the tag")
@@ -61,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         from clipbot.db import Db
         from clipbot.oauth import AuthSetupError, TokenStore, run_oauth
         try:
-            asyncio.run(run_oauth(args.provider, s, TokenStore(s.tokens_path), args.redirect_uri))
+            asyncio.run(run_oauth(args.provider, s, TokenStore(s.tokens_path), args.redirect_uri, args.paste))
         except AuthSetupError as e:
             print(f"Login failed: {e}", file=sys.stderr)
             return 1
@@ -81,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
         v = asyncio.run(render_moment(m, s, db))
         print(v.path if v else "Render skipped (clip too short or download failed); see the log.")
         return 0 if v else 1
+
+    if args.cmd == "setup":
+        from clipbot.setup_wizard import run_wizard
+        run_wizard(Path(".env"), Path(args.config))
+        return 0
 
     if args.cmd == "status":
         from clipbot.app import status_report
