@@ -20,3 +20,12 @@ class Publisher(Protocol):
     name: str
 
     async def publish(self, video_path: Path, meta: dict) -> PostResult: ...
+
+
+def caption(meta: dict) -> str:
+    """Full post caption: description (has the @streamer tag and credit) plus hashtags if missing."""
+    text = meta.get("description") or meta.get("title", "")
+    if f"@{meta.get('display_name', '')}" not in text and meta.get("display_name"):
+        text = f"{text}\n@{meta['display_name']}"
+    missing = [h for h in meta.get("hashtags", []) if h not in text]
+    return (text + ("\n" + " ".join(missing) if missing else "")).strip()
