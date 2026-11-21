@@ -1,0 +1,40 @@
+from clipbot.twitch.chat import JOIN_DELAY_S, classify_line, parse_irc_line
+
+
+def test_parse_privmsg_with_tags():
+    line = ("@badge-info=;display-name=Bob;tmi-sent-ts=1700000000123;user-id=1 "
+            ":bob!bob@bob.tmi.twitch.tv PRIVMSG #xqc :KEKW what was that")
+    m = parse_irc_line(line)
+    assert m.channel == "xqc" and m.user == "bob" and m.text == "KEKW what was that"
+    assert abs(m.ts - 1700000000.123) < 1e-6
+
+
+def test_parse_privmsg_without_tags_uses_now():
+    m = parse_irc_line(":amy!amy@amy.tmi.twitch.tv PRIVMSG #summit1g :Pog", now=42.0)
+    assert (m.channel, m.user, m.text, m.ts) == ("summit1g", "amy", "Pog", 42.0)
+
+
+def test_parse_ping_returns_none():
+    assert parse_irc_line("PING :tmi.twitch.tv") is None
+
+
+def test_parse_other_command_returns_none():
+    assert parse_irc_line(":tmi.twitch.tv 001 justinfan123 :Welcome, GLHF!") is None
+
+
+def test_chat_message_saying_reconnect_is_just_a_message():
+    kind, msg = classify_line(":troll!troll@troll.tmi.twitch.tv PRIVMSG #xqc :spam RECONNECT lol")
+    assert kind == "msg" and msg.text == "spam RECONNECT lol"
+
+
+def test_server_reconnect_command():
+    assert classify_line(":tmi.twitch.tv RECONNECT") == ("reconnect", None)
+
+
+def test_ping_is_answered():
+    assert classify_line("PING :tmi.twitch.tv") == ("ping", ":tmi.twitch.tv")
+
+
+def test_join_pacing_under_twitch_limit():
+    # Twitch allows 20 JOINs per 10 seconds; excess JOINs are silently dropped
+    assert 10 / JOIN_DELAY_S <= 20

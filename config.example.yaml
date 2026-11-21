@@ -1,0 +1,56 @@
+# Copy to config.yaml and edit. Every setting is optional; the values shown are the defaults.
+
+# --- What to watch ---
+top_n: 25                         # how many of the biggest live GTA 6 streams to watch
+game_name: "Grand Theft Auto VI"  # Twitch category name
+discovery_interval_min: 5         # how often to refresh the list of streams
+channel_blocklist: []             # Twitch logins to never clip, e.g. [somestreamer]
+
+# --- Hype detection ---
+hype_threshold: 3.0       # chat must be ~3x busier than normal for that channel
+trigger_buckets: 2        # ...for this many 5-second windows in a row
+bucket_s: 5
+baseline_window_s: 300    # how much history defines "normal" chat speed
+channel_cooldown_s: 120   # at most one clip per channel every 2 minutes
+max_clips_per_hour: 40    # across all channels
+# emotes:                 # override any category; these words mark a moment as funny/hype/shock
+#   funny: [LUL, OMEGALUL, KEKW, LMAO]
+#   hype: [Pog, PogChamp, W, HOLY]
+#   shock: ["???", WHAT, monkaS]
+
+# --- Making videos ---
+render_interval_min: 10   # make one video every 10 minutes
+min_post_score: 3.5       # skip the slot if the best moment is weaker than this
+# facecams:               # where a streamer's webcam is in their 1920x1080 stream: [x, y, width, height]
+#   somestreamer: [1500, 40, 380, 220]
+
+# --- Posting ---
+enabled:
+  youtube: false
+  tiktok: false
+  instagram: false
+# Posting is made to look like a person doing it: a different number of posts each day,
+# at random times during waking hours, never two platforms at once.
+daily_posts:              # each day picks a random number in this range
+  youtube: [2, 4]
+  tiktok: [3, 6]
+  instagram: [2, 5]
+active_hours: "10:00-23:00"  # only post between these times (your local time)
+min_gap_min: 45           # at least this long between posts on the same platform
+stagger_min: 10           # at least this long between posts on different platforms
+retry_after_fail_min: 30  # after a failed upload, wait this long before trying again
+budgets:                  # hard safety cap: never more than this many posts in any 24 hours
+  youtube: 6
+  tiktok: 10
+  instagram: 20
+freshness_hours: 6        # only post videos made in the last 6 hours
+quiet_hours: null         # extra no-post window, e.g. "13:00-14:00"
+timezone: null            # e.g. "America/New_York" for quiet_hours; null = this computer's time
+youtube_privacy: public
+graph_api_version: v21.0
+# blocklist: [...]        # replaces the built-in list of slurs that stop a video from being posted
+
+# --- Housekeeping ---
+keep_days: 7              # delete finished videos older than this
+data_dir: data
+output_dir: output
