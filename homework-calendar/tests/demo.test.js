@@ -17,6 +17,7 @@ test('demoData runs through buildItems/whatsNext with something in every group, 
         assert.ok(s[k].length > 0, `${k} empty at ${now}`);
       }
       assert.ok(items.some((i) => i.done && i.source === 'coursework'));
+      assert.ok(s.overdue.some((i) => i.kind === 'test'), `no overdue test at ${now}`);
       assert.ok(items.some((i) => i.title === 'Soccer' && i.repeatWeekly && i.time === '17:00'));
       assert.ok(items.some((i) => i.title.includes('<') && i.title.includes('&')));
       assert.equal(raw.courses.length, 3);

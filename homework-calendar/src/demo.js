@@ -31,6 +31,7 @@ export function demoData(now) {
       cw('w4', 'c1', 'Fractions: 1/2 < 3/4 & more', { dueDate: allDay(addDays(today, 1)) }),
       cw('w5', 'c3', 'Book report', { dueDate: allDay(addDays(today, -1)) }, 'TURNED_IN'),
       cw('w6', 'c2', 'Unit 4 Quiz', { dueDate: allDay(addDays(today, 2)) }),
+      cw('w7', 'c1', 'Chapter 3 Quiz', { dueDate: allDay(addDays(today, -3)) }),
     ],
     announcements: [
       { id: 'a1', courseId: 'c3', text: 'Test on Friday!', alternateLink: link('a1'), creationTime: created },

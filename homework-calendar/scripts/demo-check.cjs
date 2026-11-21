@@ -60,6 +60,8 @@ async function run(browser, base, width, height) {
   check(`${tag} #next shows ⚠ TEST`, next.includes('⚠ TEST'), next.slice(0, 120));
   check(`${tag} #next shows "add a date"`, next.includes('add a date'));
   check(`${tag} an overdue row exists`, (await page.locator('.row.overdue').count()) > 0);
+  const late = (await page.locator('#next .overdue').textContent().catch(() => '')) || '';
+  check(`${tag} missed quiz is in What's next overdue`, late.includes('Chapter 3 Quiz'), late.slice(0, 120));
 
   check(`${tag} "Test on Friday!" visible`,
     await page.getByText('Test on Friday!', { exact: true }).first().isVisible().catch(() => false));

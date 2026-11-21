@@ -57,11 +57,34 @@ test('testDates gives an undated test a date', () => {
   assert.equal(ymd(t.dueAt), '2026-11-27'); assert.equal(t.allDay, true); assert.equal(t.needsDate, false);
 });
 
-test('old coursework is dropped', () => {
+test('old coursework that is done is dropped after 30 days', () => {
   const items = buildItems(raw({ courseWork: [
-    { id: 'o', courseId: 'c1', title: 'Old', alternateLink: 'x', dueDate: { year: 2026, month: 10, day: 9 }, creationTime: iso(new Date(2026, 8, 1)) },
+    { id: 'o', courseId: 'c1', title: 'Old', alternateLink: 'x', dueDate: { year: 2026, month: 10, day: 9 }, creationTime: iso(new Date(2026, 8, 1)), submissionState: 'TURNED_IN' },
+    { id: 'r', courseId: 'c1', title: 'Returned', alternateLink: 'x', dueDate: { year: 2026, month: 10, day: 9 }, creationTime: iso(new Date(2026, 8, 1)), submissionState: 'RETURNED' },
+    { id: 't', courseId: 'c1', title: 'Ticked', alternateLink: 'x', dueDate: { year: 2026, month: 10, day: 9 }, creationTime: iso(new Date(2026, 8, 1)) },
+    { id: 'n', courseId: 'c1', title: 'Undated done', alternateLink: 'x', creationTime: iso(new Date(2026, 8, 1)), submissionState: 'TURNED_IN' },
+  ] }), saved({ checks: { 'cw:t': true } }), now);
+  for (const id of ['cw:o', 'cw:r', 'cw:t', 'cw:n']) assert.equal(find(items, id), undefined, id);
+});
+
+test('unfinished coursework stays up to 120 days past due (Classroom still says Missing)', () => {
+  const items = buildItems(raw({ courseWork: [
+    { id: 'm', courseId: 'c1', title: 'Missing map', alternateLink: 'x', dueDate: { year: 2026, month: 9, day: 1 }, creationTime: iso(new Date(2026, 7, 20)), submissionState: 'CREATED' },
+    { id: 'u', courseId: 'c1', title: 'Unticked', alternateLink: 'x', dueDate: { year: 2026, month: 9, day: 1 }, creationTime: iso(new Date(2026, 7, 20)), submissionState: 'TURNED_IN' },
+    { id: 'g', courseId: 'c1', title: 'Too old', alternateLink: 'x', dueDate: { year: 2026, month: 7, day: 20 }, creationTime: iso(new Date(2026, 6, 1)) },
+    { id: 'n', courseId: 'c1', title: 'Undated open', alternateLink: 'x', creationTime: iso(new Date(2026, 8, 1)) },
+  ] }), saved({ checks: { 'cw:u': false } }), now);
+  assert.equal(find(items, 'cw:m').done, false);
+  assert.equal(find(items, 'cw:u').done, false);
+  assert.ok(find(items, 'cw:n'));
+  assert.equal(find(items, 'cw:g'), undefined);
+});
+
+test('announcement title is its first non-blank line', () => {
+  const items = buildItems(raw({ announcements: [
+    { id: 'a1', courseId: 'c1', text: '\n  \r\n  Spelling test Thursday  \nStudy list 4', alternateLink: 'l', creationTime: iso(now) },
   ] }), saved(), now);
-  assert.equal(find(items, 'cw:o'), undefined);
+  assert.equal(find(items, 'an:a1').title, 'Spelling test Thursday');
 });
 
 test('my items become items', () => {

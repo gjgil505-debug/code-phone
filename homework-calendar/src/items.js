@@ -15,6 +15,11 @@ import { classroomDueToDate, parseYmd, startOfDay } from './dates.js';
 const TEST_WORDS = /\b(test|quiz|exam)\b/i;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Classroom says the work is handed in. */
+export function isTurnedIn(submissionState) {
+  return submissionState === 'TURNED_IN' || submissionState === 'RETURNED';
+}
+
 export function isTestText(...strings) {
   return strings.some((s) => typeof s === 'string' && TEST_WORDS.test(s));
 }
@@ -30,9 +35,15 @@ export function buildItems(raw, saved, now) {
   const testDates = (saved && saved.testDates) || {};
   const myItems = (saved && saved.myItems) || [];
   const cutoff = now.getTime() - 30 * DAY_MS;
+  // Unfinished coursework stays longer: Classroom keeps showing it as Missing.
+  const openCutoff = now.getTime() - 120 * DAY_MS;
   const courseNames = new Map((raw.courses || []).map((c) => [c.id, c.name]));
   const courseName = (id) => courseNames.get(id) || '';
   const items = [];
+
+  const isDone = (id, submissionState) => (typeof checks[id] === 'boolean'
+    ? checks[id]
+    : isTurnedIn(submissionState));
 
   const finish = (item, submissionState) => {
     const override = testDates[item.id];
@@ -41,16 +52,15 @@ export function buildItems(raw, saved, now) {
       item.allDay = true;
     }
     item.needsDate = item.kind === 'test' && item.dueAt === null;
-    item.done = typeof checks[item.id] === 'boolean'
-      ? checks[item.id]
-      : submissionState === 'TURNED_IN' || submissionState === 'RETURNED';
+    item.done = isDone(item.id, submissionState);
     items.push(item);
   };
 
   for (const w of raw.courseWork || []) {
     const due = classroomDueToDate(w.dueDate, w.dueTime);
     const created = new Date(w.creationTime).getTime();
-    if (due ? due.date.getTime() < cutoff : !(created >= cutoff)) continue;
+    const since = isDone(`cw:${w.id}`, w.submissionState) ? cutoff : openCutoff;
+    if (due ? due.date.getTime() < since : !(created >= since)) continue;
     finish({
       id: `cw:${w.id}`, source: 'coursework', courseName: courseName(w.courseId),
       title: w.title, link: w.alternateLink || null,
@@ -65,7 +75,7 @@ export function buildItems(raw, saved, now) {
     if (!isTestText(text) || !(new Date(a.creationTime).getTime() >= cutoff)) continue;
     finish({
       id: `an:${a.id}`, source: 'announcement', courseName: courseName(a.courseId),
-      title: text.split(/\r?\n/)[0].slice(0, 80), link: a.alternateLink || null,
+      title: (text.split(/\r?\n/).find((l) => l.trim()) || '').trim().slice(0, 80), link: a.alternateLink || null,
       dueAt: null, allDay: false, kind: 'test',
       done: false, needsDate: false, repeatWeekly: false, time: null,
     });

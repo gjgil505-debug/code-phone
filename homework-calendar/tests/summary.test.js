@@ -29,6 +29,9 @@ test('timed homework earlier today is overdue; all-day today is not', () => {
 test('whatsNext groups tests this week, overdue, today, tomorrow; skips activities and done', () => {
   const items = [
     item({ id: 'late', dueAt: day(11, 20) }),
+    item({ id: 'missed-quiz', kind: 'test', title: 'Chapter 3 Quiz', dueAt: day(11, 21) }),
+    item({ id: 'missed-quiz-done', kind: 'test', dueAt: day(11, 21), done: true }),
+    item({ id: 'old-soccer', kind: 'activity', dueAt: day(11, 21) }),
     item({ id: 'earlier-today', dueAt: at(11, 23, 9), allDay: false }),
     item({ id: 'today-allday', dueAt: day(11, 23) }),
     item({ id: 'today-evening', dueAt: at(11, 23, 18), allDay: false }),
@@ -45,7 +48,7 @@ test('whatsNext groups tests this week, overdue, today, tomorrow; skips activiti
   const r = whatsNext(items, now);
   assert.deepEqual(ids(r.tests), ['test-today-early', 'test-a', 'test-b']);
   assert.deepEqual(ids(r.needsDate), ['nodate']);
-  assert.deepEqual(ids(r.overdue), ['late', 'earlier-today']);
+  assert.deepEqual(ids(r.overdue), ['late', 'missed-quiz', 'earlier-today']);
   assert.deepEqual(ids(r.today), ['today-allday', 'today-evening']);
   assert.deepEqual(ids(r.tomorrow), ['tomorrow']);
 });
@@ -106,4 +109,14 @@ test('weekDays sorts timed before all-day', () => {
   const w = weekDays(items, parseYmd('2026-11-23'));
   assert.deepEqual(ids(w[1].items), ['early', 'late', 'allday']);
   assert.deepEqual(w.flatMap((d) => ids(d.items)).length, 3);
+});
+
+test('an overdue undone test is in overdue, so What\'s next is never empty while it is missed', () => {
+  const r = whatsNext([item({ id: 'quiz', kind: 'test', title: 'Chapter 3 Quiz', dueAt: day(11, 20) })], now);
+  assert.deepEqual(ids(r.overdue), ['quiz']);
+  assert.deepEqual(ids(r.tests), []);
+  // A timed test earlier today stays under tests (TEST today), not twice.
+  const t = whatsNext([item({ id: 'early', kind: 'test', dueAt: at(11, 23, 9), allDay: false })], now);
+  assert.deepEqual(ids(t.tests), ['early']);
+  assert.deepEqual(ids(t.overdue), []);
 });

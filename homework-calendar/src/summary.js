@@ -20,8 +20,9 @@ export function whatsNext(items, now) {
     .filter((i) => i.kind === 'test' && i.dueAt && startOfDay(i.dueAt) >= today && startOfDay(i.dueAt) < weekEnd)
     .sort(byDue);
   const needsDate = open.filter((i) => i.needsDate).sort(byTitle);
+  // Overdue: any missed homework or test (a timed test earlier today stays under tests).
+  const overdue = open.filter((i) => isOverdue(i, now) && !tests.includes(i)).sort(byDue);
   const homework = open.filter((i) => i.kind === 'homework' && i.dueAt);
-  const overdue = homework.filter((i) => isOverdue(i, now)).sort(byDue);
   const notLate = homework.filter((i) => !isOverdue(i, now));
   return {
     tests,
