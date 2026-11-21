@@ -1,3 +1,5 @@
+See [homework-calendar/SETUP.md](homework-calendar/SETUP.md) for the Homework Calendar page (Google Classroom viewer) setup guide.
+
 # clipbot: autonomous GTA 6 hype clips
 
 clipbot watches the 25 biggest live GTA 6 streams on Twitch and reads their chat. When a chat suddenly
