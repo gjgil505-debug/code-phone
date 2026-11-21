@@ -17,9 +17,68 @@ It doesn't use any paid AI services. The platforms' APIs are free.
 
 ---
 
+## Phone-only setup (no computer needed)
+
+You can do everything from your phone. The bot lives on a free cloud server and you control it with a
+terminal app.
+
+### A. Get a free server (Oracle Cloud "Always Free")
+1. In your phone's browser, open <https://www.oracle.com/cloud/free/> and sign up for the free tier.
+   - They ask for a card to verify you. The Always Free resources aren't charged.
+   - Pick a home region near you. It can't be changed later.
+2. Install **Termius** from the App Store or Play Store. It's free.
+3. In Termius, make an SSH key: **Keychain → + → Generate Key** (type ED25519). Open the key and
+   copy its **public key**.
+4. In the Oracle console, create a server: **Compute → Instances → Create instance**.
+   - Image: **Canonical Ubuntu 24.04**.
+   - Shape: **Ampere → VM.Standard.A1.Flex**, 4 OCPUs and 24 GB memory. Both are inside the free
+     allowance.
+   - SSH keys: choose **Paste public keys** and paste the key from step 3.
+   - Create it, then copy its **Public IP address**.
+   - If Oracle says it's **out of capacity**, try again later or try a different availability domain.
+     A paid fallback is a Hetzner CAX11 server, about 4 euros a month, set up the same way.
+5. In Termius, add a host:
+   - Address: the public IP.
+   - Username: `ubuntu`.
+   - Key: the one from step 3.
+
+   Tap the host to connect. You're now typing on the server.
+
+### B. Install clipbot (one command)
+Your GitHub repo is **private**, so the server needs permission to download it. Pick one:
+- **Easiest:** make the repo public. On github.com in your phone's browser, open the repo, then
+  **Settings → General → Danger Zone → Change visibility → Public**. No passwords or keys are ever
+  stored in the repo. Then paste this into Termius:
+  ```
+  curl -fsSL https://raw.githubusercontent.com/gjgil505-debug/code-phone/main/deploy/install.sh | bash
+  ```
+- **Keep it private:** on github.com, open **Settings → Developer settings → Fine-grained tokens →
+  Generate new token**. Give it access to only this repo, with **Contents: Read-only**. Then paste
+  these two lines, putting your token in place of `YOUR_TOKEN`:
+  ```
+  export GITHUB_TOKEN=YOUR_TOKEN
+  curl -fsSL -H "Authorization: token $GITHUB_TOKEN" https://raw.githubusercontent.com/gjgil505-debug/code-phone/main/deploy/install.sh | bash
+  ```
+
+### C. Enter your keys and log in
+1. Make the developer apps in steps 3–6 below. Do it in your phone's browser; the redirect URL is
+   still `http://localhost:8765/callback`.
+2. In Termius, run `cd ~/clipbot` then `clipbot setup`. It asks for each key one at a time:
+   long-press to paste.
+3. Run each `clipbot auth ...` command it lists, one at a time. Each prints a link. For each:
+   - Open the link on your phone and approve.
+   - Your browser then goes to a `localhost` page that **won't load**. That's expected.
+   - Copy the whole address from the address bar and paste it back into Termius.
+4. Start the bot with `sudo systemctl restart clipbot`, then check on it with `clipbot status`.
+
+It now runs all the time. It restarts by itself if it crashes or the server reboots, and you can
+close Termius. To check on it later, reconnect in Termius and run `clipbot status`.
+
+---
+
 ## What you need to do
 
-### 1. A computer that stays on
+### 1. A computer that stays on (skip if you followed the phone-only setup)
 - A PC, Mac, Linux box or small server that runs all day, every day, on stable internet
   (about 4–6 GB of traffic a day).
 - About 20 GB of free disk space and a decent processor.

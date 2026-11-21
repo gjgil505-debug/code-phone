@@ -50,3 +50,12 @@ async def test_exchange_instagram_without_linked_account_errors():
         return_value=httpx.Response(200, json={"data": [{"name": "x", "access_token": "p"}]}))
     with pytest.raises(AuthSetupError, match="Instagram"):
         await exchange_code("instagram", S, "c", REDIR, httpx.AsyncClient())
+
+
+def test_paste_mode_on_servers_and_phones():
+    from clipbot.oauth import use_paste_mode
+    local = "http://localhost:8765/callback"
+    assert use_paste_mode(local, {}) is False                      # desktop: browser on same machine
+    assert use_paste_mode(local, {"SSH_CONNECTION": "1.2.3.4 5 6 7"}) is True  # logged in over SSH (Termius)
+    assert use_paste_mode(local, {"CLIPBOT_PASTE_LOGIN": "1"}) is True
+    assert use_paste_mode("https://example.com/cb", {}) is True    # redirect page isn't this machine

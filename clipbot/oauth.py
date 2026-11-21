@@ -172,19 +172,35 @@ def _wait_for_local_redirect(redirect_uri: str, timeout_s: float = 300) -> str:
     return got["url"]
 
 
-async def run_oauth(provider: str, s: Settings, tokens: TokenStore, redirect_uri: str = DEFAULT_REDIRECT) -> dict:
+def use_paste_mode(redirect_uri: str, env) -> bool:
+    """Ask the user to paste the redirected address instead of listening for it locally.
+
+    Needed when the browser is on another device (a phone talking to a server over SSH), or when the
+    redirect page isn't this machine.
+    """
+    if urlparse(redirect_uri).hostname not in ("localhost", "127.0.0.1"):
+        return True
+    return bool(env.get("SSH_CONNECTION") or env.get("SSH_TTY") or env.get("CLIPBOT_PASTE_LOGIN"))
+
+
+async def run_oauth(provider: str, s: Settings, tokens: TokenStore, redirect_uri: str = DEFAULT_REDIRECT,
+                    paste: bool | None = None) -> dict:
     state = secrets.token_urlsafe(16)
     url = authorize_url(provider, s, state, redirect_uri)
-    print(f"\nOpen this link, log in and approve:\n\n  {url}\n")
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
-    if urlparse(redirect_uri).hostname in ("localhost", "127.0.0.1"):
+    if paste is None:
+        paste = use_paste_mode(redirect_uri, os.environ)
+    print(f"\nOpen this link, log in and approve:\n\n{url}\n")
+    if paste:
+        print("After you approve, your browser goes to a page that may not load (that's expected).\n"
+              "Copy the full address from the address bar and paste it here.")
+        redirected = input("Paste the address: ")
+    else:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
         print(f"Waiting for the redirect to {redirect_uri} ...")
         redirected = await asyncio.to_thread(_wait_for_local_redirect, redirect_uri)
-    else:
-        redirected = input("After approving, paste the full URL your browser was sent to: ")
     code = parse_redirect(redirected, state)
     async with httpx.AsyncClient(timeout=60) as client:
         tok = await exchange_code(provider, s, code, redirect_uri, client)
