@@ -32,6 +32,7 @@ test('classifyGoogleError cases', () => {
   assert.equal(classifyGoogleError({gisError:'popup_closed'}), 'signin');
   assert.equal(classifyGoogleError({networkError:true}), 'network');
   assert.equal(classifyGoogleError({status:500}), 'other');
+  assert.equal(classifyGoogleError({gisError:'admin_policy_enforced'}), 'blocked');
 });
 
 test('fetchClassroom merges submission states and follows one nextPageToken', async () => {
@@ -82,6 +83,35 @@ test('loadSaved returns null when no file; saveSaved creates then patches', asyn
   assert.ok(last[1].url.includes('/files/F1?uploadType=media'));
 });
 
+test('saveSaved looks for an existing file before creating one', async () => {
+  const f = fake([
+    ['drive/v3/files?spaces', res({ files: [{ id: 'F7' }] })],
+    ['uploadType=media', res({ id: 'F7' })],
+  ]);
+  const state = { version: 1, checks: {}, testDates: {}, myItems: [], updatedAt: 5 };
+  await createApi(tok, f).saveSaved(state);
+  assert.ok(f.calls[0].url.includes('drive/v3/files?spaces=appDataFolder'));
+  assert.ok(f.calls[0].url.includes('orderBy=modifiedTime%20desc') || f.calls[0].url.includes('orderBy=modifiedTime+desc'));
+  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls[1].opts.method, 'PATCH');
+  assert.ok(f.calls[1].url.includes('/files/F7?uploadType=media'));
+  assert.ok(!f.calls.some((c) => c.url.includes('uploadType=multipart')));
+});
+
+test('after a failed first load, saveSaved still finds the file instead of making a second one', async () => {
+  let down = true;
+  const f = fake([
+    ['drive/v3/files?spaces', () => { if (down) throw new TypeError('offline'); return res({ files: [{ id: 'F8' }] }); }],
+    ['uploadType=media', res({ id: 'F8' })],
+  ]);
+  const api = createApi(tok, f);
+  await assert.rejects(api.loadSaved(), (e) => e.kind === 'network');
+  down = false;
+  await api.saveSaved({ version: 1, checks: {}, testDates: {}, myItems: [], updatedAt: 6 });
+  assert.ok(!f.calls.some((c) => c.url.includes('uploadType=multipart')));
+  assert.ok(f.calls.at(-1).url.includes('/files/F8?uploadType=media'));
+});
+
 test('loadSaved reads an existing file', async () => {
   const f = fake([
     ['drive/v3/files?spaces', res({ files: [{ id: 'F9' }] })],
@@ -99,13 +129,58 @@ test('403 on courses throws kind blocked; rejected fetch is network', async () =
 });
 
 function fakeGoogle() {
-  const g = { requests: [] };
-  g.google = { accounts: { oauth2: { initTokenClient: (cfg) => {
-    g.cfg = cfg;
-    return { requestAccessToken: (o) => g.requests.push(o) };
-  } } } };
+  const g = { requests: [], granted: true, scopeChecks: [] };
+  g.google = { accounts: { oauth2: {
+    initTokenClient: (cfg) => {
+      g.cfg = cfg;
+      return { requestAccessToken: (o) => g.requests.push(o) };
+    },
+    hasGrantedAllScopes: (resp, ...scopes) => { g.scopeChecks.push({ resp, scopes }); return g.granted; },
+  } } };
   return g;
 }
+
+test('signIn asks with prompt "" so Google shows consent only when needed', async () => {
+  const g = fakeGoogle();
+  const auth = createAuth('id', g.google);
+  for (let n = 0; n < 2; n++) {
+    const p = auth.signIn();
+    g.cfg.callback({ access_token: 'T' + n, expires_in: 3600 });
+    await p;
+  }
+  assert.deepEqual(g.requests.map((r) => r.prompt), ['', '']);
+});
+
+test('missing scopes reject with kind scopes, keep no token, and the next signIn asks for consent', async () => {
+  const g = fakeGoogle();
+  const auth = createAuth('id', g.google);
+  g.granted = false;
+  const p1 = auth.signIn();
+  g.cfg.callback({ access_token: 'PART', expires_in: 3600, scope: 'x' });
+  await assert.rejects(p1, (e) => e.kind === 'scopes');
+  assert.deepEqual(g.scopeChecks[0].scopes, SCOPES.split(' '));
+  assert.equal(g.scopeChecks[0].resp.access_token, 'PART');
+  assert.equal(auth.hasToken(), false);
+  g.granted = true;
+  const p2 = auth.signIn();
+  g.cfg.callback({ access_token: 'FULL', expires_in: 3600 });
+  assert.equal(await p2, 'FULL');
+  assert.equal(auth.hasToken(), true);
+  const p3 = auth.signIn();
+  g.cfg.callback({ access_token: 'AGAIN', expires_in: 3600 });
+  await p3;
+  assert.deepEqual(g.requests.map((r) => r.prompt), ['', 'consent', '']);
+});
+
+test('hasToken is false until a token with time left arrives', async () => {
+  const g = fakeGoogle();
+  const auth = createAuth('id', g.google);
+  assert.equal(auth.hasToken(), false);
+  const p = auth.getToken();
+  g.cfg.callback({ access_token: 'SHORT', expires_in: 30 });
+  await p;
+  assert.equal(auth.hasToken(), false);
+});
 
 test('concurrent getToken makes one request and shares the token', async () => {
   const g = fakeGoogle();

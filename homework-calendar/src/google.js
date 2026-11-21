@@ -15,6 +15,7 @@ const FILE_NAME = 'homework-calendar.json';
 
 export function classifyGoogleError({ status, body, gisError, networkError } = {}) {
   if (networkError) return 'network';
+  if (gisError === 'admin_policy_enforced') return 'blocked';
   if (status === 401) return 'signin';
   if (status === 403 && /ClassroomApiDisabled|admin_policy_enforced|PERMISSION_DENIED|has not been granted/.test(String(body || ''))) return 'blocked';
   if (['popup_closed', 'access_denied', 'popup_failed_to_open'].includes(gisError)) return 'signin';
@@ -29,13 +30,20 @@ function makeError(message, kind, status) {
 }
 
 export function createAuth(clientId, google = globalThis.google) {
-  let token = null, expiresAt = 0, asked = false, pending = null, inflight = null;
+  // needConsent: he left a box unticked last time, so show Google's full consent screen again.
+  let token = null, expiresAt = 0, needConsent = false, pending = null, inflight = null;
   const settle = (fn, v) => { const p = pending; pending = null; if (p) p[fn](v); };
-  const client = google.accounts.oauth2.initTokenClient({
+  const oauth2 = google.accounts.oauth2;
+  const client = oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
     callback: (r) => {
       if (r.error) return settle('reject', makeError(r.error, classifyGoogleError({ gisError: r.error })));
+      if (!oauth2.hasGrantedAllScopes(r, ...SCOPES.split(' '))) {
+        needConsent = true;
+        return settle('reject', makeError('not every permission was granted', 'scopes'));
+      }
+      needConsent = false;
       token = r.access_token;
       expiresAt = Date.now() + Number(r.expires_in || 0) * 1000;
       settle('resolve', token);
@@ -49,16 +57,17 @@ export function createAuth(clientId, google = globalThis.google) {
     }).finally(() => { inflight = null; });
     return inflight;
   };
+  const hasToken = () => !!token && expiresAt - Date.now() > 60000;
   return {
+    // Google shows its consent screen by itself when something is still to be granted.
     signIn() {
-      const prompt = asked ? '' : 'consent';
-      asked = true;
-      return request(prompt);
+      return request(needConsent ? 'consent' : '');
     },
     async getToken() {
-      if (token && expiresAt - Date.now() > 60000) return token;
+      if (hasToken()) return token;
       return request('');
     },
+    hasToken,
   };
 }
 
@@ -124,21 +133,26 @@ export function createApi(getToken, fetchFn = (...a) => fetch(...a)) {
     return raw;
   }
 
+  // Finds the saved file (newest first if there are ever two). Sets fileId; false when there is none.
+  async function findFile() {
+    if (fileId) return true;
+    const q = encodeURIComponent(`name='${FILE_NAME}'`);
+    const order = encodeURIComponent('modifiedTime desc');
+    const res = await call(`${DRIVE}/files?spaces=appDataFolder&q=${q}&orderBy=${order}&fields=files(id)`);
+    const files = (await res.json()).files || [];
+    if (files.length) fileId = files[0].id;
+    return !!fileId;
+  }
+
   async function loadSaved() {
-    if (!fileId) {
-      const q = encodeURIComponent(`name='${FILE_NAME}'`);
-      const res = await call(`${DRIVE}/files?spaces=appDataFolder&q=${q}&fields=files(id)`);
-      const files = (await res.json()).files || [];
-      if (!files.length) return null;
-      fileId = files[0].id;
-    }
+    if (!(await findFile())) return null;
     const res = await call(`${DRIVE}/files/${fileId}?alt=media`);
     return normalizeState(await res.text());
   }
 
   async function saveSaved(state) {
     const content = JSON.stringify(state);
-    if (fileId) {
+    if (await findFile()) {
       await call(`${UPLOAD}/files/${fileId}?uploadType=media`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content,
       });
