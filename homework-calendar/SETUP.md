@@ -15,10 +15,10 @@ Words in **bold** are things you click or type. Google changes its screens now a
 
 ## 1. See it first (no setup)
 
-You can look at the page with fake homework before you set anything up. You need Python 3 on your computer (most Macs and Linux computers have it).
+You can look at the page with fake homework before you set anything up. You need Python 3 on your computer (most Macs and Linux computers have it; on Windows, install it from the Microsoft Store or python.org).
 
 1. Open a terminal in the `homework-calendar` folder.
-2. Type `python3 -m http.server 8000` and press Enter. Leave it running.
+2. Type `python3 -m http.server 8000` and press Enter. Leave it running. On Windows, type `py -m http.server 8000` instead.
 3. In a browser, go to <http://localhost:8000/?demo=1>.
 
 You can also open the page without `?demo=1` and click **Try with sample data**.
@@ -133,7 +133,7 @@ Steps:
 ### Option B: On your own computer
 
 1. Open a terminal in the `homework-calendar` folder.
-2. Type `python3 -m http.server 8000` and press Enter.
+2. Type `python3 -m http.server 8000` and press Enter. On Windows, type `py -m http.server 8000` instead.
 3. Open <http://localhost:8000/> in a browser.
 4. Check that Step 2d has `http://localhost:8000` in the origins list.
 
@@ -144,8 +144,10 @@ This only works on that computer while the command is running.
 1. Open the page and click **Sign in with Google**.
 2. Choose the student's school account (the one you added as a test user).
 3. Google will say **Google hasn't verified this app**. This is normal. Google shows it for every new app that has not been through its review. Click **Advanced**, then **Go to Homework Calendar (unsafe)** (or **Continue**).
-4. On the permissions screen, **tick every box**. If you leave one empty, parts of the page will not work.
+4. On the permissions screen, **tick every box**. If you leave one empty, the page says "Please sign in again and tick every box." Click **Sign in with Google** again and tick them all.
 5. Click **Continue**. The homework should show up.
+
+After this first time, Google remembers the answer and does not show the permissions screen again. Signing in is usually one quick click.
 
 If Google shows an `origin_mismatch` error right after you finish setup, wait a few minutes and try again. New settings can take a little while to start working.
 
@@ -177,3 +179,4 @@ If the school says no, there is a fallback. Ask the student to send you their we
 6. Sometimes Classroom has a test but no date. Under **What's next** the page shows an **Add a date** section with an **Add date** button. Click it and pick the date so the test shows in the right place.
 7. Click **Refresh** to load new things from Classroom.
 8. If the page says "Showing saved info, can't reach Google right now.", you are offline. Your saved things still show. Try Refresh later.
+9. If the page says "Sign-in ran out. Tap Reconnect to keep saving.", click **Reconnect**. Your ticks are kept and get saved once you are signed in again.
