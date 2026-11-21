@@ -21,9 +21,12 @@ It must cost as close to nothing as possible to run.
 - Burned-in word-by-word captions and a visible streamer credit.
 - Zero paid services.
 
+- Fully autonomous: it runs unattended and posts the best videos to YouTube Shorts,
+  TikTok and Instagram Reels without anyone reviewing them first.
+
 ## Non-goals (v1)
 
-- Auto-posting to TikTok / YouTube / Instagram. Videos land in a folder for review.
+- Posting every video. Only the best ones are posted, within each platform's limits.
 - Platforms other than Twitch (Kick, YouTube Live).
 - Recording streams continuously.
 - Automatic webcam detection (per-streamer webcam crop can be set by hand in config).
@@ -35,6 +38,8 @@ It must cost as close to nothing as possible to run.
 - Videos without the streamer's tag at the bottom.
 - Hammering Twitch's API or spamming clips on a streamer's channel.
 - Anything that costs money per video.
+- Spam-like posting that gets the accounts flagged.
+- Auto-posting a clip with slurs in it.
 
 ## Constraints
 
@@ -45,7 +50,17 @@ It must cost as close to nothing as possible to run.
 - Clips created through the API are public on the streamer's channel and attributed
   to that Twitch account.
 - Reposting other streamers' content is common in this niche but the content is theirs;
-  credit is always shown, and the user decides what to publish.
+  credit is always shown.
+- Platform posting rules (from memory, to be checked against current docs when building):
+  - **YouTube:** Data API v3 uploads cost ~1,600 of the default 10,000 daily
+    quota units, so about 6 uploads a day. Uploads from an unverified API project
+    are forced private until Google audits the project.
+  - **TikTok:** Content Posting API (Direct Post). Until the app passes TikTok's
+    audit, posts can only be private (`SELF_ONLY`).
+  - **Instagram:** Graph API Reels publishing needs a Business or Creator account
+    linked to a Facebook Page, with a cap of about 50 posts per 24 hours.
+- Streamers' background music can trigger copyright claims on posted videos. There's
+  no free fix; the bot records claims/failures in its log.
 
 ## Approaches considered
 
@@ -128,6 +143,47 @@ Python 3.11, single asyncio process, SQLite for state. Components:
 - Sidecar `…json` with the streamer, source clip URL, trigger type, score, a
   suggested title, a description with credit, and hashtags (`#GTA6 #<streamer> …`).
 
+### 8. Safety check (before anything is posted)
+- If the transcript contains a word from a configurable blocklist (slurs and similar),
+  the video is saved but never posted.
+
+### 9. Publisher
+- Each platform (YouTube, TikTok, Instagram) is a separate plug-in with its own
+  on/off switch in config, so a platform can be switched on once its app is approved.
+- Each platform has a daily budget. Defaults:
+  - YouTube: 6
+  - TikTok: 10
+  - Instagram: 20
+
+  Posts are spread evenly through the day (minimum gap = 24 h ÷ budget), with an
+  optional quiet window (e.g. 3–8 am local).
+- When a platform's slot comes up, it posts the highest-scoring video from the last
+  6 hours that hasn't been posted there yet and passed the safety check. The same
+  video can go to all three platforms.
+- Per platform:
+  - **YouTube:** `videos.insert` resumable upload, OAuth (installed-app flow).
+    Title from the hook text plus `#Shorts`; description with the streamer's tag,
+    the source clip link and hashtags.
+  - **TikTok:** Content Posting API Direct Post with chunked `FILE_UPLOAD`. Query
+    `creator_info` first and use an allowed privacy level (public once audited).
+  - **Instagram:** Graph API Reels container (resumable upload of the local file),
+    poll the container until it's finished, then `media_publish`.
+- A `posts` table records the platform, video, post ID/URL and status. Failed uploads
+  are retried up to 3 times with backoff. If authentication fails, that platform is
+  switched off and the error is logged, and the other platforms keep running.
+
+### 10. Running unattended
+- Runs as a long-lived service: a systemd unit on Linux, with a Dockerfile as an
+  alternative and instructions for Windows Task Scheduler / macOS launchd.
+  It restarts automatically on crash.
+- All OAuth tokens refresh automatically. One-time login commands for each platform.
+- Housekeeping:
+  - delete downloaded source clips after rendering
+  - delete rendered videos older than 7 days (configurable)
+  - rotate logs
+- A `clipbot status` command shows: streams being watched, moments found, videos
+  made, posts per platform today, and the last errors.
+
 ### Config
 - `.env`: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_USER_REFRESH_TOKEN`.
 - `config.yaml`: `TOP_N`, game name, interval (10 min), thresholds, emote lists,
@@ -136,7 +192,8 @@ Python 3.11, single asyncio process, SQLite for state. Components:
 
 ### CLI
 - `clipbot run` starts the bot.
-- `clipbot auth` handles the one-time Twitch login.
+- `clipbot auth twitch|youtube|tiktok|instagram` handles the one-time logins.
+- `clipbot status` shows a health summary.
 - `clipbot render <clip_url>` renders a single clip by hand (useful for testing
   the look).
 
@@ -156,7 +213,12 @@ Python 3.11, single asyncio process, SQLite for state. Components:
 ## Calls made by Claude (not decided by the user)
 
 - Twitch only, top 25 streams, 10-minute slots, and skip a slot rather than post filler.
-- Output goes to a review folder; no auto-posting.
+- The user chose fully autonomous posting to YouTube, TikTok and Instagram.
+  Claude chose the defaults:
+  - daily budgets: YouTube 6, TikTok 10, Instagram 20
+  - a 6-hour freshness window for videos that can be posted
+  - a slur blocklist
+  - each platform has its own switch
 - Hook = cold open of the loudest moment plus template text (free) rather than
   AI-written text (paid).
 - Captions use local faster-whisper.
@@ -170,3 +232,5 @@ Python 3.11, single asyncio process, SQLite for state. Components:
 - Whether the current Create Clip API accepts a duration parameter (use it if
   available, default ~30 s).
 - Handling of token refresh and API rate-limit headers.
+- Checking current platform API limits and requirements, and adjusting the default
+  budgets to match.
