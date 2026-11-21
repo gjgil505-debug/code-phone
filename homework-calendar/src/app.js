@@ -13,11 +13,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const MSG = {
   blocked: "Your school blocked this app from reading Google Classroom. Ask a parent to contact the school's IT.",
   offline: "Showing saved info, can't reach Google right now.",
+  noCache: "Can't reach Google right now.",
   noGoogle: "Can't reach Google right now. Check the internet and reload.",
   other: 'Something went wrong talking to Google. Try Refresh.',
 };
 const EMPTY_RAW = { courses: [], courseWork: [], announcements: [], materials: [] };
 const CLASSROOM_KEY = 'hc.classroom';
+const STATE_KEY = 'hc.state';
+const NO_DATA = '<p class="empty missing">Couldn\'t load Classroom.</p>';
 
 const $ = (id) => document.getElementById(id);
 const demo = new URLSearchParams(location.search).has('demo');
@@ -28,7 +31,7 @@ let items = [];
 let weekStart = startOfWeek(new Date());
 let auth = null;
 let api = null;
-let persistence = null;  // null in demo mode: state lives in memory only
+let persistence = null;  // null in demo mode: state lives in memory only; cache-only when Google can't load
 let editingId = null;    // raw id of the item open in the add/edit dialog
 let datingId = null;     // item id open in the pick-date dialog
 
@@ -62,7 +65,7 @@ function handleError(err) {
   } else if (kind === 'blocked') {
     setStatus(MSG.blocked, 'error');
   } else if (kind === 'network') {
-    setStatus(MSG.offline);
+    setStatus(raw ? MSG.offline : MSG.noCache);
   } else {
     setStatus(MSG.other, 'error');
   }
@@ -91,7 +94,10 @@ function render() {
   items = buildItems(raw || EMPTY_RAW, saved, now);
   const byId = new Map(items.map((i) => [i.id, i]));
 
-  $('next-body').innerHTML = renderWhatsNext(whatsNext(items, now), now);
+  // Without Classroom data, say so instead of "Nothing due"; his own items still show.
+  const summary = whatsNext(items, now);
+  const anyNext = Object.values(summary).some((list) => list.length);
+  $('next-body').innerHTML = (raw ? '' : NO_DATA) + (raw || anyNext ? renderWhatsNext(summary, now) : '');
 
   $('week-h').textContent = weekHeading(now);
   $('week-label').textContent = rangeLabel(weekStart);
@@ -103,9 +109,9 @@ function render() {
   }
 
   const rows = checklist(items, now);
-  $('checklist-body').innerHTML = rows.length
+  $('checklist-body').innerHTML = (raw ? '' : NO_DATA) + (rows.length
     ? renderChecklist(rows, now)
-    : '<p class="empty">Nothing on the list. Nice!</p>';
+    : raw ? '<p class="empty">Nothing on the list. Nice!</p>' : '');
   for (const box of $('checklist-body').querySelectorAll('input[data-action=check]')) {
     if (byId.get(box.dataset.id)?.kind === 'test') box.closest('.row').classList.add('kind-test');
   }
@@ -253,11 +259,20 @@ function safeStorage() {
   return storage;
 }
 
+// Cached RawData must have the four arrays of objects, or it is treated as missing.
+function readCachedRaw(cache) {
+  const x = cache.readCacheRaw(CLASSROOM_KEY);
+  const ok = x && typeof x === 'object' && Object.keys(EMPTY_RAW).every((k) =>
+    Array.isArray(x[k]) && x[k].every((v) => v !== null && typeof v === 'object'));
+  return ok ? x : null;
+}
+
 function waitForGis(timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const until = Date.now() + timeoutMs;
     (function poll() {
       if (window.google?.accounts?.oauth2) return resolve(window.google);
+      if (window.gisFailed) return reject(new Error('Google sign-in script failed to load'));
       if (Date.now() > until) return reject(new Error('Google sign-in script did not load'));
       setTimeout(poll, 100);
     })();
@@ -302,7 +317,7 @@ async function signIn() {
   setStatus('');
   showApp();
   if (!raw) {
-    raw = persistence.readCacheRaw(CLASSROOM_KEY);
+    raw = readCachedRaw(persistence);
     saved = pickNewer(saved, persistence.readCache());
     if (raw) render();
   }
@@ -323,13 +338,14 @@ async function startLive() {
     google = await waitForGis();
   } catch {
     // Offline before sign-in: show whatever this device saved last time.
-    const storage = safeStorage();
-    const cache = createPersistence({ storage, api: null });
-    raw = cache.readCacheRaw(CLASSROOM_KEY);
+    // Changes are kept in the local cache; the next signed-in load prefers the newer copy and syncs it.
+    const cache = createPersistence({ storage: safeStorage(), api: null });
+    raw = readCachedRaw(cache);
     if (raw) {
       saved = cache.readCache();
+      persistence = { save: (state) => cache.writeCache(STATE_KEY, state), flush: async () => {} };
       showApp();
-      $('top-buttons').hidden = true;
+      $('refresh').hidden = true;
       render();
       setStatus(MSG.offline);
     } else {

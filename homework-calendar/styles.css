@@ -145,6 +145,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 }
 .card > h2, .week-head h2 { font-size: 21px; margin-bottom: 10px; }
 .empty { color: var(--muted); margin: 4px 0; }
+.empty.missing { color: var(--late); font-weight: 700; }
 .course {
   display: inline-block;
   font-size: 13px;

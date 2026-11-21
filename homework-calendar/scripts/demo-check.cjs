@@ -1,5 +1,6 @@
 // Browser check of demo mode. Usage: node scripts/demo-check.cjs <screenshot-dir>
-// Serves homework-calendar/ with python3, opens /?demo=1 in Chromium at phone and desktop sizes.
+// Serves homework-calendar/ with python3, opens /?demo=1 in Chromium at phone and desktop sizes,
+// then checks offline/blocked/no-cache handling in live mode with Google stubbed out.
 const { chromium } = require('playwright');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -148,6 +149,100 @@ async function run(browser, base, width, height) {
   await context.close();
 }
 
+// ---------- live mode with Google stubbed (no real network) ----------
+
+const FAKE_CONFIG = "export const CLIENT_ID = 'check.apps.googleusercontent.com';";
+// A GIS stand-in whose token request succeeds at once.
+const FAKE_GIS = `window.google = { accounts: { oauth2: { initTokenClient(o) { return {
+  requestAccessToken() { setTimeout(() => o.callback({ access_token: 't', expires_in: 3600 }), 0); } }; } } } };`;
+const CACHED_RAW = {
+  courses: [{ id: 'c1', name: 'Art' }],
+  courseWork: [{ id: 'k1', courseId: 'c1', title: 'Cached drawing', alternateLink: 'https://classroom.google.com/x',
+    creationTime: new Date().toISOString(), dueDate: (() => {
+      const d = new Date(); d.setDate(d.getDate() + 1);
+      return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+    })() }],
+  announcements: [], materials: [],
+};
+
+async function livePage(browser, base, { gis, classroom, drive, cache }) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const page = await context.newPage();
+  page.setDefaultTimeout(5000);
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route('**/config.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_CONFIG }));
+  await page.route('https://accounts.google.com/**', (r) => (gis === 'fail'
+    ? r.abort()
+    : r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_GIS })));
+  await page.route('https://classroom.googleapis.com/**', (r) => (classroom === 'blocked'
+    ? r.fulfill({ status: 403, contentType: 'application/json', body: '{"error":{"status":"PERMISSION_DENIED"}}' })
+    : r.abort()));
+  await page.route('https://www.googleapis.com/**', (r) => (drive === 'empty'
+    ? r.fulfill({ status: 200, contentType: 'application/json', body: '{"files":[]}' })
+    : r.abort()));
+  if (cache !== undefined) {
+    await page.addInitScript((c) => {
+      if (!sessionStorage.getItem('seeded')) {
+        localStorage.setItem('hc.classroom', c);
+        sessionStorage.setItem('seeded', '1');
+      }
+    }, cache);
+  }
+  await page.goto(`${base}/`);
+  return { context, page, errors };
+}
+
+const text = async (page, sel) => ((await page.locator(sel).textContent().catch(() => '')) || '');
+
+async function signInAndSettle(page) {
+  await page.waitForFunction(() => !document.getElementById('signin-btn').disabled);
+  await page.click('#signin-btn');
+  await page.waitForFunction(() => {
+    const s = document.getElementById('status');
+    return !document.getElementById('app').hidden && !(s.textContent || '').startsWith('Loading');
+  });
+}
+
+async function runLive(browser, base) {
+  const scenario = async (name, opts, fn) => {
+    const { context, page, errors } = await livePage(browser, base, opts);
+    try { await fn(page, errors); } catch (e) { check(`${name} scenario`, false, e.message.split('\n')[0]); }
+    await context.close();
+  };
+  // 1. Google script can't load, cached Classroom data: shown, and a tick survives a reload.
+  await scenario('offline view', { gis: 'fail', cache: JSON.stringify(CACHED_RAW) }, async (page, errors) => {
+    // Generous wait: the page also gives up on the Google script after a timeout.
+    await page.waitForSelector('#checklist .row', { timeout: 20000 });
+    check('offline view shows cached data', (await text(page, '#checklist')).includes('Cached drawing'));
+    check('offline view says saved info', (await text(page, '#status')).includes("Showing saved info, can't reach Google right now."));
+    await page.click('#checklist input[data-id="cw:k1"]');
+    await page.reload();
+    await page.waitForSelector('#checklist .row', { timeout: 20000 });
+    check('offline tick survives reload', await page.locator('#checklist input[data-id="cw:k1"]').isChecked());
+    check('offline view no page errors', errors.length === 0, errors.join(' | '));
+  });
+  // 2. School blocks the app on first use: blocked message, no "Nice!".
+  await scenario('blocked', { classroom: 'blocked', drive: 'empty' }, async (page, errors) => {
+    await signInAndSettle(page);
+    const status = await text(page, '#status');
+    check('blocked message', status === "Your school blocked this app from reading Google Classroom. Ask a parent to contact the school's IT.", status);
+    const next = await text(page, '#next'), list = await text(page, '#checklist');
+    check('blocked: "Couldn\'t load Classroom." in both sections',
+      next.includes("Couldn't load Classroom.") && list.includes("Couldn't load Classroom."));
+    check('blocked: no "Nice!"', !next.includes('Nice!') && !list.includes('Nice!'));
+    check('blocked no page errors', errors.length === 0, errors.join(' | '));
+  });
+  // 3. Network down, corrupt cache: treated as no cache.
+  await scenario('corrupt cache', { cache: '{"courses":5}' }, async (page, errors) => {
+    await signInAndSettle(page);
+    const status = await text(page, '#status');
+    check('no-cache network message', status === "Can't reach Google right now.", status);
+    check('corrupt cache: "Couldn\'t load Classroom."', (await text(page, '#next')).includes("Couldn't load Classroom."));
+    check('corrupt cache no page errors', errors.length === 0, errors.join(' | '));
+  });
+}
+
 (async () => {
   fs.mkdirSync(shotDir, { recursive: true });
   const port = await freePort();
@@ -160,6 +255,7 @@ async function run(browser, base, width, height) {
     browser = await chromium.launch();
     await run(browser, base, 390, 844);
     await run(browser, base, 1280, 800);
+    await runLive(browser, base);
   } catch (e) {
     check('run', false, e.message);
   } finally {
