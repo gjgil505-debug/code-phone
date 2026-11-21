@@ -1,9 +1,11 @@
 // DOM wiring: sign-in, loading, rendering and the two dialogs.
 import { CLIENT_ID } from '../config.js';
 import { ymd, parseYmd, addDays, startOfWeek, sameDay } from './dates.js';
-import { buildItems } from './items.js';
+import { buildItems, isTurnedIn } from './items.js';
 import { whatsNext, checklist, weekDays } from './summary.js';
-import { emptyState, setCheck, setTestDate, addMyItem, updateMyItem, deleteMyItem, pickNewer } from './store.js';
+import {
+  emptyState, setCheck, clearCheck, setTestDate, addMyItem, updateMyItem, deleteMyItem, pickNewer,
+} from './store.js';
 import { renderWhatsNext, renderWeek, renderChecklist } from './render.js';
 import { demoData } from './demo.js';
 import { createAuth, createApi } from './google.js';
@@ -16,7 +18,11 @@ const MSG = {
   noCache: "Can't reach Google right now.",
   noGoogle: "Can't reach Google right now. Check the internet and reload.",
   other: 'Something went wrong talking to Google. Try Refresh.',
+  otherSignIn: 'Something went wrong talking to Google. Try again.',
+  reconnect: 'Sign-in ran out. Tap Reconnect to keep saving.',
+  scopes: 'Please sign in again and tick every box.',
 };
+const STALE_MS = 15 * 60 * 1000; // refresh Classroom on coming back after this long
 const EMPTY_RAW = { courses: [], courseWork: [], announcements: [], materials: [] };
 const CLASSROOM_KEY = 'hc.classroom';
 const STATE_KEY = 'hc.state';
@@ -34,14 +40,19 @@ let api = null;
 let persistence = null;  // null in demo mode: state lives in memory only; cache-only when Google can't load
 let editingId = null;    // raw id of the item open in the add/edit dialog
 let datingId = null;     // item id open in the pick-date dialog
+let loadedOnce = false;  // the first Drive load after sign-in has settled
+let loadQueue = null;    // edits made while that first load is in flight, replayed onto its result
+let lastFetchAt = 0;     // when Classroom last loaded
+let renderedDay = null;  // local day (YYYY-MM-DD) of the last render
 
 // ---------- status and screens ----------
 
-function setStatus(text, tone = 'warn') {
-  const el = $('status');
-  el.textContent = text || '';
-  el.dataset.tone = tone;
-  el.hidden = !text;
+function setStatus(text, tone = 'warn', { reconnect = false } = {}) {
+  const bar = $('status-bar');
+  $('status').textContent = text || '';
+  bar.dataset.tone = tone;
+  bar.hidden = !text;
+  $('reconnect').hidden = !(text && reconnect);
 }
 
 function showApp() {
@@ -57,17 +68,24 @@ function showSignIn({ hint = false } = {}) {
   $('signin-hint').hidden = !hint;
 }
 
-function handleError(err) {
+// background: nobody tapped (a Drive save, a refresh on coming back). Sign-in trouble then
+// keeps the app on screen with a Reconnect button instead of swapping to the sign-in screen.
+function handleError(err, { background = false } = {}) {
   const kind = err && err.kind;
-  if (kind === 'signin') {
-    setStatus('');
-    showSignIn({ hint: true });
+  const appShown = !$('app').hidden;
+  if (kind === 'signin' || kind === 'scopes') {
+    if (background && appShown) {
+      setStatus(kind === 'scopes' ? MSG.scopes : MSG.reconnect, 'warn', { reconnect: true });
+    } else {
+      showSignIn();
+      setStatus(kind === 'scopes' ? MSG.scopes : '', 'error');
+    }
   } else if (kind === 'blocked') {
     setStatus(MSG.blocked, 'error');
   } else if (kind === 'network') {
     setStatus(raw ? MSG.offline : MSG.noCache);
   } else {
-    setStatus(MSG.other, 'error');
+    setStatus(appShown ? MSG.other : MSG.otherSignIn, 'error');
   }
 }
 
@@ -91,6 +109,7 @@ function weekHeading(now) {
 
 function render() {
   const now = new Date();
+  renderedDay = ymd(now);
   items = buildItems(raw || EMPTY_RAW, saved, now);
   const byId = new Map(items.map((i) => [i.id, i]));
 
@@ -117,10 +136,27 @@ function render() {
   }
 }
 
-function commit(next) {
-  saved = next;
-  if (persistence) persistence.save(saved);
+// Every change is a function of the saved state, so changes made before the first Drive load
+// settles can be replayed onto what Drive had instead of a stale cached copy winning.
+function edit(change) {
+  saved = change(saved);
+  if (loadQueue) loadQueue.push(change);
+  else if (persistence) persistence.save(saved);
   render();
+}
+
+// What Classroom says about this item: turned in or not.
+function classroomDone(id) {
+  if (!raw || !id.startsWith('cw:')) return false;
+  const w = raw.courseWork.find((x) => `cw:${x.id}` === id);
+  return isTurnedIn(w && w.submissionState);
+}
+
+function tick(id, done) {
+  const now = Date.now();
+  // Same as Classroom: forget the manual choice, so a later turn-in still counts.
+  const same = !!done === classroomDone(id);
+  edit((s) => (same ? clearCheck(s, id, now) : setCheck(s, id, done, now)));
 }
 
 // ---------- add / edit dialog ----------
@@ -165,15 +201,18 @@ function saveAddDialog() {
     return;
   }
   try {
+    const now = Date.now();
     if (editingId) {
       // store.updateMyItem merges, so cleared fields are passed as undefined to drop them.
       const fields = { kind, title, date, time: time || undefined, repeatWeekly: repeat || undefined };
-      commit(updateMyItem(saved, editingId, fields, Date.now()));
+      const id = editingId;
+      edit((s) => updateMyItem(s, id, fields, now));
     } else {
       const fields = { kind, title, date };
       if (time) fields.time = time;
       if (repeat) fields.repeatWeekly = true;
-      commit(addMyItem(saved, fields, Date.now()));
+      const id = crypto.randomUUID();
+      edit((s) => addMyItem(s, fields, now, () => id));
     }
   } catch (err) {
     $('add-error').textContent = err.message;
@@ -187,7 +226,7 @@ function saveAddDialog() {
 function openPickDate(item) {
   datingId = item.id;
   $('pick-date-what').textContent = item.courseName ? `${item.courseName}: ${item.title}` : item.title;
-  $('pick-date-input').value = '';
+  $('pick-date-input').value = item.datePicked && item.dueAt ? ymd(item.dueAt) : '';
   $('pick-date-error').textContent = '';
   $('pick-date').showModal();
 }
@@ -198,7 +237,8 @@ function savePickDate() {
     $('pick-date-error').textContent = 'Pick a date';
     return;
   }
-  commit(setTestDate(saved, datingId, date, Date.now()));
+  const id = datingId, now = Date.now();
+  edit((s) => setTestDate(s, id, date, now));
   $('pick-date').close();
 }
 
@@ -207,7 +247,7 @@ function savePickDate() {
 function wireEvents() {
   document.addEventListener('change', (ev) => {
     const box = ev.target.closest?.('[data-action=check]');
-    if (box) commit(setCheck(saved, box.dataset.id, box.checked, Date.now()));
+    if (box) tick(box.dataset.id, box.checked);
   });
 
   const openEdit = (el) => {
@@ -240,15 +280,34 @@ function wireEvents() {
   $('add-form').addEventListener('submit', (ev) => { ev.preventDefault(); saveAddDialog(); });
   $('add-cancel').addEventListener('click', () => $('add').close());
   $('add-delete').addEventListener('click', () => {
-    if (editingId) commit(deleteMyItem(saved, editingId, Date.now()));
+    const id = editingId, now = Date.now();
+    if (id) edit((s) => deleteMyItem(s, id, now));
     $('add').close();
   });
   $('pick-date-form').addEventListener('submit', (ev) => { ev.preventDefault(); savePickDate(); });
   $('pick-date-cancel').addEventListener('click', () => $('pick-date').close());
 
+  $('reconnect').addEventListener('click', reconnect);
+
   const flush = () => { if (persistence) persistence.flush(); };
   window.addEventListener('pagehide', flush);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+  window.addEventListener('pageshow', wake);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush();
+    else wake();
+  });
+}
+
+// Back to a page left open: catch up with the date, and with Classroom if it's been a while.
+function wake() {
+  const now = new Date();
+  if (renderedDay && renderedDay !== ymd(now)) {
+    if (sameDay(weekStart, startOfWeek(parseYmd(renderedDay)))) weekStart = startOfWeek(now);
+    render();
+  }
+  if (api && auth && lastFetchAt && !$('app').hidden && Date.now() - lastFetchAt > STALE_MS && auth.hasToken()) {
+    refresh({ background: true });
+  }
 }
 
 // ---------- Google ----------
@@ -279,25 +338,42 @@ function waitForGis(timeoutMs = 15000) {
   });
 }
 
+// Ends the first-load queue: replays the edits made meanwhile onto the loaded state and saves them.
+function endLoadQueue(loadedState) {
+  const queue = loadQueue;
+  loadQueue = null;
+  loadedOnce = true;
+  if (!queue) return;
+  let next = loadedState ? pickNewer(queue.base, loadedState) : queue.base;
+  for (const change of queue) next = change(next);
+  saved = next;
+  if (queue.length && persistence) persistence.save(saved);
+}
+
 let refreshing = null;
-function refresh() {
+function refresh({ background = false } = {}) {
   refreshing ||= (async () => {
     const btn = $('refresh');
     btn.disabled = true;
     btn.setAttribute('aria-busy', 'true');
     if (!raw) setStatus('Loading…', 'info');
+    if (!loadedOnce && !loadQueue) loadQueue = Object.assign([], { base: saved });
     try {
       const [loaded, fresh] = await Promise.allSettled([persistence.load(), api.fetchClassroom(new Date())]);
-      if (loaded.status === 'fulfilled') saved = pickNewer(saved, loaded.value);
+      const loadedState = loaded.status === 'fulfilled' ? loaded.value : null;
+      if (loadQueue) endLoadQueue(loadedState);
+      else if (loadedState) saved = pickNewer(saved, loadedState);
       if (fresh.status === 'fulfilled') {
         raw = fresh.value;
+        lastFetchAt = Date.now();
         persistence.writeCache(CLASSROOM_KEY, raw);
         setStatus('');
       } else {
-        handleError(fresh.reason);
+        handleError(fresh.reason, { background });
       }
       render();
     } finally {
+      if (loadQueue) endLoadQueue(null);
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
       refreshing = null;
@@ -306,16 +382,36 @@ function refresh() {
   return refreshing;
 }
 
+// The Reconnect button: a tap, so Google may open its sign-in popup. Then send what's waiting.
+async function reconnect() {
+  const btn = $('reconnect');
+  btn.disabled = true;
+  try {
+    await auth.signIn();
+  } catch (err) {
+    handleError(err, { background: true });
+    return;
+  } finally {
+    btn.disabled = false;
+  }
+  setStatus('');
+  await persistence.flush();
+}
+
 async function signIn() {
   try {
     await auth.signIn();
   } catch (err) {
-    showSignIn({ hint: true });
-    if (err.kind !== 'signin') handleError(err);
+    // The 'Access blocked' hint only makes sense after a sign-in that failed or was closed.
+    showSignIn({ hint: err.kind === 'signin' });
+    if (err.kind === 'scopes') setStatus(MSG.scopes, 'error');
+    else if (err.kind === 'signin') setStatus('');
+    else handleError(err);
     return;
   }
   setStatus('');
   showApp();
+  persistence.flush(); // anything left unsaved while signed out
   if (!raw) {
     raw = readCachedRaw(persistence);
     saved = pickNewer(saved, persistence.readCache());
@@ -355,7 +451,9 @@ async function startLive() {
   }
   auth = createAuth(CLIENT_ID, google);
   api = createApi(auth.getToken);
-  persistence = createPersistence({ storage: safeStorage(), api, onSyncError: handleError });
+  persistence = createPersistence({
+    storage: safeStorage(), api, onSyncError: (err) => handleError(err, { background: true }),
+  });
   btn.disabled = false;
   btn.addEventListener('click', signIn);
 }

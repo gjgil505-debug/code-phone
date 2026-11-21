@@ -107,6 +107,8 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
   color: var(--test-ink);
   font-weight: 600;
 }
+.status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.status .btn { margin-left: auto; }
 .status[data-tone=error] { background: var(--late-bg); color: var(--late); }
 .status[data-tone=info] { background: var(--brand-soft); color: var(--ink); }
 
