@@ -28,24 +28,31 @@ export function createPersistence({
 
   function drive() {
     if (running) return running;
-    running = (async () => {
-      try {
-        while (pending) {
-          const state = pending;
-          pending = null;
-          try {
-            await api.saveSaved(state);
-          } catch (err) {
-            if (!pending) pending = state; // keep for retry unless superseded
-            reportError(err);
-            break;
-          }
+    if (!pending) return Promise.resolve();
+    const p = (async () => {
+      while (pending) {
+        const state = pending;
+        pending = null;
+        try {
+          await api.saveSaved(state);
+        } catch (err) {
+          if (!pending) pending = state; // keep for retry unless superseded
+          reportError(err);
+          break;
         }
-      } finally {
-        running = null;
       }
-    })();
-    return running;
+    })().finally(() => {
+      if (running === p) running = null;
+      // Something is still unsaved after a failure: retry later, not in a tight loop.
+      if (pending && timer === null) arm();
+    });
+    running = p;
+    return p;
+  }
+
+  function arm() {
+    cancelTimer();
+    timer = setTimer(() => { timer = null; drive(); }, debounceMs);
   }
 
   function cancelTimer() {
@@ -61,16 +68,20 @@ export function createPersistence({
       reportError(err);
       return cached;
     }
-    const result = pickNewer(cached, remote ? normalizeState(remote) : emptyState());
+    const remoteState = remote ? normalizeState(remote) : emptyState();
+    const result = pickNewer(cached, remoteState);
     writeCache(STATE_KEY, result);
+    if (result.updatedAt > remoteState.updatedAt && !pending) {
+      pending = result; // local is newer than Drive: push it
+      arm();
+    }
     return result;
   }
 
   function save(state) {
     writeCache(STATE_KEY, state);
     pending = state;
-    cancelTimer();
-    timer = setTimer(() => { timer = null; drive(); }, debounceMs);
+    arm();
   }
 
   async function flush() {

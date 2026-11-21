@@ -96,11 +96,56 @@ test('failed Drive save retries on flush', async () => {
   assert.equal(calls.length, 3);
 });
 
-test('flush with nothing pending does nothing and never rejects', async () => {
-  const p = createPersistence({ storage: fakeStorage(), api: { saveSaved: async () => { throw new Error('x'); } }, ...fakeTimers() });
+test('flush with nothing pending does nothing, never rejects, and does not wedge later saves', async () => {
+  const timers = fakeTimers(); const calls = []; let fail = true;
+  const api = { saveSaved: async (s) => { calls.push(s); if (fail) throw new Error('x'); } };
+  const p = createPersistence({ storage: fakeStorage(), api, ...timers });
   await p.flush();
+  assert.equal(calls.length, 0);
   p.save(st(1));
+  timers.fire(); await tick();
+  assert.equal(calls.length, 1);
   await p.flush();
+  assert.equal(calls.length, 2);
+  fail = false;
+  await p.flush();
+  assert.equal(calls.length, 3);
+});
+
+test('state saved during a failing save is retried via re-armed timer', async () => {
+  const timers = fakeTimers(); const calls = []; const rel = [];
+  const api = { saveSaved: (s) => { calls.push(s); return new Promise((res, rej) => rel.push({ res, rej })); } };
+  const p = createPersistence({ storage: fakeStorage(), api, ...timers, onSyncError() {} });
+  p.save(st(1));
+  timers.fire(); await tick();
+  p.save(st(2));
+  const f = p.flush(); // cancels B's timer, waits on A
+  rel[0].rej(new Error('offline')); await f;
+  assert.equal(calls.length, 1);
+  assert.equal(timers.pending(), 1, 'retry timer armed');
+  timers.fire(); await tick();
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].updatedAt, 2);
+  rel[1].res(); await tick();
+});
+
+test('load pushes a newer cached state to Drive; equal or older does not', async () => {
+  const storage = fakeStorage();
+  storage.setItem('hc.state', JSON.stringify(st(10)));
+  const timers = fakeTimers(); const calls = [];
+  const api = { loadSaved: async () => st(5), saveSaved: async (s) => void calls.push(s) };
+  const p = createPersistence({ storage, api, ...timers });
+  await p.load();
+  timers.fire(); await tick();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].updatedAt, 10);
+  for (const remote of [st(10), st(20), null]) {
+    const t2 = fakeTimers(); const c2 = [];
+    const s2 = fakeStorage(); s2.setItem('hc.state', JSON.stringify(st(remote ? 10 : 0)));
+    const p2 = createPersistence({ storage: s2, api: { loadSaved: async () => remote, saveSaved: async (s) => void c2.push(s) }, ...t2 });
+    await p2.load(); t2.fire(); await tick();
+    assert.equal(c2.length, 0);
+  }
 });
 
 test('Drive saves are serialized and coalesced', async () => {
