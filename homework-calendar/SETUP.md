@@ -9,14 +9,21 @@ You will need:
 - The student's school Google email address.
 - A free GitHub account (only if you want the page on the internet, Step 4).
 
+The sign-in screens will say **Homework Calendar**, but the page itself is titled **My Homework**. It is the same app.
+
 Words in **bold** are things you click or type. Google changes its screens now and then. If a name below is not exactly on your screen, look for one that is close.
 
 ## 1. See it first (no setup)
 
-You can look at the page with fake homework before you set anything up.
+You can look at the page with fake homework before you set anything up. You need Python 3 on your computer (most Macs and Linux computers have it).
 
-1. Open the page and add `?demo=1` to the end of the address. Example: `.../homework-calendar/?demo=1`.
-2. Or open the page and click **Try with sample data**.
+1. Open a terminal in the `homework-calendar` folder.
+2. Type `python3 -m http.server 8000` and press Enter. Leave it running.
+3. In a browser, go to <http://localhost:8000/?demo=1>.
+
+You can also open the page without `?demo=1` and click **Try with sample data**.
+
+Double-clicking `index.html` will not work. The page needs a small local web server, which the command above starts. Press Ctrl+C in the terminal to stop it when you are done.
 
 Nothing is saved in this mode. It is only to see what the page looks like.
 
@@ -139,6 +146,8 @@ This only works on that computer while the command is running.
 3. Google will say **Google hasn't verified this app**. This is normal. Google shows it for every new app that has not been through its review. Click **Advanced**, then **Go to Homework Calendar (unsafe)** (or **Continue**).
 4. On the permissions screen, **tick every box**. If you leave one empty, parts of the page will not work.
 5. Click **Continue**. The homework should show up.
+
+If Google shows an `origin_mismatch` error right after you finish setup, wait a few minutes and try again. New settings can take a little while to start working.
 
 Note: while the app is in testing mode, Google makes the sign-in expire after about 7 days. The student just clicks **Sign in with Google** again. This is expected.
 
