@@ -29,22 +29,26 @@ function makeError(message, kind, status) {
 }
 
 export function createAuth(clientId, google = globalThis.google) {
-  let token = null, expiresAt = 0, asked = false, pending = null;
+  let token = null, expiresAt = 0, asked = false, pending = null, inflight = null;
+  const settle = (fn, v) => { const p = pending; pending = null; if (p) p[fn](v); };
   const client = google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
     callback: (r) => {
-      if (r.error) return pending.reject(makeError(r.error, classifyGoogleError({ gisError: r.error })));
+      if (r.error) return settle('reject', makeError(r.error, classifyGoogleError({ gisError: r.error })));
       token = r.access_token;
       expiresAt = Date.now() + Number(r.expires_in || 0) * 1000;
-      pending.resolve(token);
+      settle('resolve', token);
     },
-    error_callback: (e) => pending.reject(makeError(e.type || 'sign-in failed', classifyGoogleError({ gisError: e.type }))),
+    error_callback: (e) => settle('reject', makeError(e.type || 'sign-in failed', classifyGoogleError({ gisError: e.type }))),
   });
-  const request = (prompt) => new Promise((resolve, reject) => {
-    pending = { resolve, reject };
-    client.requestAccessToken({ prompt });
-  });
+  const request = (prompt) => {
+    inflight ||= new Promise((resolve, reject) => {
+      pending = { resolve, reject };
+      client.requestAccessToken({ prompt });
+    }).finally(() => { inflight = null; });
+    return inflight;
+  };
   return {
     signIn() {
       const prompt = asked ? '' : 'consent';

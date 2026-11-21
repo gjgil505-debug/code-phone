@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SCOPES, classifyGoogleError, createApi } from '../src/google.js';
+import { SCOPES, classifyGoogleError, createApi, createAuth } from '../src/google.js';
 
 const res = (body, status = 200) => ({
   ok: status >= 200 && status < 300, status,
@@ -96,4 +96,46 @@ test('403 on courses throws kind blocked; rejected fetch is network', async () =
   await assert.rejects(createApi(tok, f).fetchClassroom(new Date()), e => e.kind === 'blocked' && e.status === 403);
   const bad = async () => { throw new TypeError('x'); };
   await assert.rejects(createApi(tok, bad).loadSaved(), e => e.kind === 'network');
+});
+
+function fakeGoogle() {
+  const g = { requests: [] };
+  g.google = { accounts: { oauth2: { initTokenClient: (cfg) => {
+    g.cfg = cfg;
+    return { requestAccessToken: (o) => g.requests.push(o) };
+  } } } };
+  return g;
+}
+
+test('concurrent getToken makes one request and shares the token', async () => {
+  const g = fakeGoogle();
+  const auth = createAuth('id', g.google);
+  const p1 = auth.getToken(), p2 = auth.getToken();
+  assert.equal(g.requests.length, 1);
+  g.cfg.callback({ access_token: 'T1', expires_in: 3600 });
+  assert.deepEqual(await Promise.all([p1, p2]), ['T1', 'T1']);
+});
+
+test('cached token with time left needs no request', async () => {
+  const g = fakeGoogle();
+  const auth = createAuth('id', g.google);
+  const p = auth.getToken();
+  g.cfg.callback({ access_token: 'T1', expires_in: 3600 });
+  await p;
+  assert.equal(await auth.getToken(), 'T1');
+  assert.equal(g.requests.length, 1);
+});
+
+test('error_callback popup_closed rejects with kind signin', async () => {
+  const g = fakeGoogle();
+  const p = createAuth('id', g.google).signIn();
+  g.cfg.error_callback({ type: 'popup_closed' });
+  await assert.rejects(p, (e) => e.kind === 'signin');
+});
+
+test('late callback with nothing pending does not throw', () => {
+  const g = fakeGoogle();
+  createAuth('id', g.google);
+  assert.doesNotThrow(() => g.cfg.callback({ access_token: 'x', expires_in: 1 }));
+  assert.doesNotThrow(() => g.cfg.error_callback({ type: 'popup_closed' }));
 });
