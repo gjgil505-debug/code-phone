@@ -180,11 +180,13 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 #next-body .tests .test-line { font-weight: 800; }
 #next-body .tests a, #next-body .needs-date a { color: inherit; }
 #next-body .needs-date .course { color: inherit; }
-#next-body .needs-date button {
+#next-body .needs-date button, .change-date {
   font: inherit; font-weight: 700; min-height: 44px; padding: 6px 14px;
   border-radius: 999px; border: 2px solid var(--test-edge);
   background: var(--card); color: var(--ink); cursor: pointer; margin-left: auto;
 }
+.change-date { font-size: 14px; padding: 4px 12px; text-decoration: none; }
+#next-body .needs-date .snippet { font-weight: 400; }
 #next-body .overdue li { background: var(--late-bg); color: var(--late); font-weight: 700; }
 #next-body .overdue a { color: inherit; }
 #next-body .overdue .course { color: inherit; }

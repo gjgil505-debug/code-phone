@@ -55,6 +55,16 @@ test('testDates gives an undated test a date', () => {
   ] }), saved({ testDates: { 'an:a1': '2026-11-27' } }), now);
   const t = find(items, 'an:a1');
   assert.equal(ymd(t.dueAt), '2026-11-27'); assert.equal(t.allDay, true); assert.equal(t.needsDate, false);
+  assert.equal(t.datePicked, true);
+});
+
+test('items with a Classroom date or no date are not datePicked', () => {
+  const items = buildItems(raw({
+    courseWork: [{ id: 'q', courseId: 'c1', title: 'Quiz 3', alternateLink: 'x', dueDate: { year: 2026, month: 11, day: 26 }, creationTime: iso(now) }],
+    announcements: [{ id: 'a1', courseId: 'c1', text: 'Test soon', alternateLink: 'l', creationTime: iso(now) }],
+  }), saved(), now);
+  assert.equal(find(items, 'cw:q').datePicked, false);
+  assert.equal(find(items, 'an:a1').datePicked, false);
 });
 
 test('old coursework that is done is dropped after 30 days', () => {

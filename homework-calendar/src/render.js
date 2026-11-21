@@ -36,6 +36,18 @@ function courseHtml(item) {
   return item.courseName ? `<span class="course">${e(item.courseName)}</span> ` : '';
 }
 
+// He picked this test's date, so he can change it.
+function changeDateHtml(item) {
+  return item.datePicked
+    ? ` <button type="button" class="change-date" data-action="set-date" data-id="${e(item.id)}">Change date</button>`
+    : '';
+}
+
+function snippet(item) {
+  const t = String(item.title ?? '').trim();
+  return { ...item, title: t.length > 40 ? `${t.slice(0, 39).trimEnd()}…` : t };
+}
+
 export function renderWhatsNext(summary, now) {
   const parts = [];
   const list = (cls, heading, items, line) => {
@@ -43,9 +55,11 @@ export function renderWhatsNext(summary, now) {
     parts.push(`<section class="${cls}"><h3>${heading}</h3><ul>${items.map((i) => `<li>${line(i)}</li>`).join('')}</ul></section>`);
   };
   list('tests', 'Tests', summary.tests, (i) =>
-    `<span class="test-line">⚠ TEST ${e(dayLabel(i.dueAt, now))}: ${titleHtml(i)}</span> ${courseHtml(i)}`);
+    `<span class="test-line">⚠ TEST ${e(dayLabel(i.dueAt, now))}: ${titleHtml(i)}</span> ${courseHtml(i)}${changeDateHtml(i)}`);
   list('needs-date', 'Add a date', summary.needsDate, (i) =>
-    `<span>Test mentioned in ${e(i.courseName)}: add a date</span> <button type="button" data-action="set-date" data-id="${e(i.id)}">Add date</button>`);
+    `<span>Test mentioned${i.courseName ? ` in ${e(i.courseName)}` : ''}: add a date</span> ` +
+    `<span class="snippet">${titleHtml(snippet(i))}</span> ` +
+    `<button type="button" data-action="set-date" data-id="${e(i.id)}">Add date</button>`);
   const plain = (i) => `${courseHtml(i)}${titleHtml(i)}`;
   list('overdue', 'Overdue', summary.overdue, plain);
   list('today', 'Due today', summary.today, plain);
@@ -64,7 +78,7 @@ export function renderWeek(days, now) {
       const label = i.kind === 'test' ? '<strong class="label">TEST</strong> ' : '';
       const time = i.kind === 'activity' && i.dueAt && !i.allDay ? ` <span class="time">${timeLabel(i.dueAt)}</span>` : '';
       const edit = i.source === 'mine' ? ` data-action="edit" data-id="${e(i.id)}"` : '';
-      return `<div class="${c.join(' ')}"${edit}>${label}${courseHtml(i)}${titleHtml(i)}${time}</div>`;
+      return `<div class="${c.join(' ')}"${edit}>${label}${courseHtml(i)}${titleHtml(i)}${time}${changeDateHtml(i)}</div>`;
     }).join('');
     return `<div class="${cls}" data-date="${ymd(date)}">${head}${body}</div>`;
   }).join('');

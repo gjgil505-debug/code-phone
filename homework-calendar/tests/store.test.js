@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  emptyState, normalizeState, setCheck, setTestDate,
+  emptyState, normalizeState, setCheck, clearCheck, setTestDate,
   addMyItem, updateMyItem, deleteMyItem, pickNewer,
 } from '../src/store.js';
 
@@ -38,6 +38,15 @@ test('setCheck does not mutate and bumps updatedAt', () => {
   assert.deepEqual(a, emptyState());
   assert.deepEqual(b.checks, {'cw:1': true});
   assert.equal(b.updatedAt, 100);
+});
+
+test('clearCheck removes a manual choice without mutating', () => {
+  const a = setCheck(setCheck(emptyState(), 'cw:1', false, 1), 'cw:2', true, 2);
+  const b = clearCheck(a, 'cw:1', 9);
+  assert.deepEqual(b.checks, {'cw:2': true});
+  assert.equal(b.updatedAt, 9);
+  assert.deepEqual(a.checks, {'cw:1': false, 'cw:2': true});
+  assert.deepEqual(clearCheck(b, 'nope', 10).checks, {'cw:2': true});
 });
 
 test('setTestDate sets a date', () => {

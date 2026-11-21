@@ -45,10 +45,31 @@ test('overdue and done classes, today class, times, links', () => {
   assert.match(out, /data-action="edit" data-id="my:s"/);
 });
 
-test('needs-date line has set-date button', () => {
-  const out = renderWhatsNext({ ...empty, needsDate: [item({ id: 'an:9', kind: 'test', courseName: 'English', dueAt: null, needsDate: true })] }, now);
+test('needs-date line has set-date button and says which test', () => {
+  const out = renderWhatsNext({ ...empty, needsDate: [item({ id: 'an:9', kind: 'test', courseName: 'English', title: 'Test on Friday!', dueAt: null, needsDate: true })] }, now);
   assert.match(out, /Test mentioned in English: add a date/);
   assert.match(out, /data-action="set-date" data-id="an:9"/);
+  assert.match(out, /Test on Friday!/);
+});
+
+test('needs-date line without a course leaves out "in", and shortens a long title', () => {
+  const long = 'Big unit test about fractions, decimals and percents next week';
+  const out = renderWhatsNext({ ...empty, needsDate: [item({ id: 'an:9', kind: 'test', courseName: '', title: long, dueAt: null, needsDate: true })] }, now);
+  assert.match(out, /Test mentioned: add a date/);
+  assert.ok(!out.includes('mentioned in'));
+  assert.ok(!out.includes(long));
+  assert.match(out, /Big unit test about fractions, decimals…/);
+});
+
+test('a test with a picked date gets a Change date button; Classroom-dated tests do not', () => {
+  const picked = item({ id: 'an:5', kind: 'test', title: 'Test on Friday!', dueAt: new Date(2026, 10, 27), datePicked: true });
+  const fixed = item({ id: 'cw:6', kind: 'test', title: 'Quiz', dueAt: new Date(2026, 10, 26), datePicked: false });
+  const next = renderWhatsNext({ ...empty, tests: [fixed, picked] }, now);
+  assert.match(next, /<button type="button" class="change-date" data-action="set-date" data-id="an:5">Change date<\/button>/);
+  assert.ok(!next.includes('data-id="cw:6"'));
+  const week = renderWeek([{ date: new Date(2026, 10, 27), items: [picked, fixed] }], now);
+  assert.match(week, /data-action="set-date" data-id="an:5">Change date</);
+  assert.ok(!week.includes('data-action="set-date" data-id="cw:6"'));
 });
 
 test('test lines', () => {

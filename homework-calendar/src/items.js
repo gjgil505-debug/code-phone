@@ -8,7 +8,8 @@ import { classroomDueToDate, parseYmd, startOfDay } from './dates.js';
 /** @typedef {{id:string, source:'coursework'|'announcement'|'material'|'mine',
  *   courseName:string, title:string, link:string|null, dueAt:Date|null, allDay:boolean,
  *   kind:'homework'|'test'|'activity', done:boolean, needsDate:boolean,
- *   repeatWeekly:boolean, time:string|null}} Item */
+ *   repeatWeekly:boolean, time:string|null, datePicked?:boolean}} Item
+ * datePicked: the date came from SavedState.testDates (he picked it), so he can change it. */
 /** @typedef {{version:1, checks:Object<string,boolean>, testDates:Object<string,string>,
  *   myItems:{id,kind,title,date,time?,repeatWeekly?}[], updatedAt:number}} SavedState */
 
@@ -51,6 +52,7 @@ export function buildItems(raw, saved, now) {
       item.dueAt = parseYmd(override);
       item.allDay = true;
     }
+    item.datePicked = !!override;
     item.needsDate = item.kind === 'test' && item.dueAt === null;
     item.done = isDone(item.id, submissionState);
     items.push(item);

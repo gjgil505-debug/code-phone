@@ -51,6 +51,13 @@ export function setCheck(state, id, done, now) {
   return { ...state, checks: { ...state.checks, [id]: !!done }, updatedAt: now };
 }
 
+/** Forget his manual choice, so Classroom's turned-in state decides again. */
+export function clearCheck(state, id, now) {
+  const checks = { ...state.checks };
+  delete checks[id];
+  return { ...state, checks, updatedAt: now };
+}
+
 export function setTestDate(state, id, date, now) {
   return { ...state, testDates: { ...state.testDates, [id]: date }, updatedAt: now };
 }
