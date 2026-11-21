@@ -1,0 +1,17 @@
+# systemd unit: copy to /etc/systemd/system/clipbot.service, edit User and paths, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now clipbot
+[Unit]
+Description=GTA 6 hype clip bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=clipbot
+WorkingDirectory=/opt/clipbot
+EnvironmentFile=/opt/clipbot/.env
+ExecStart=/opt/clipbot/.venv/bin/clipbot run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -50,7 +50,8 @@ def due_platforms(db: Db, settings: Settings, now: datetime) -> list[str]:
 def choose_video(db: Db, platform: str, settings: Settings, now: datetime) -> Video | None:
     posted = db.posted_video_ids(platform)
     candidates = [v for v in db.videos_since(now - timedelta(hours=settings.freshness_hours))
-                  if v.safe and v.id not in posted and Path(v.path).exists() and Path(v.meta_path).exists()]
+                  if v.safe and v.score >= settings.min_post_score and v.id not in posted
+                  and Path(v.path).exists() and Path(v.meta_path).exists()]
     return max(candidates, key=lambda v: v.score, default=None)
 
 

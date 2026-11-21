@@ -159,3 +159,9 @@ async def test_nothing_to_post_does_nothing(tmp_path):
     yt = Pub("youtube", [])
     await publish_once(db, S(enabled={"youtube": True}), {"youtube": yt}, NOW)
     assert yt.calls == []
+
+
+def test_choose_never_posts_manual_test_renders(tmp_path):
+    db = Db(tmp_path / "x.db")
+    _video(db, tmp_path, score=0.0)  # `clipbot render` creates score-0 videos
+    assert choose_video(db, "youtube", S(), NOW) is None
