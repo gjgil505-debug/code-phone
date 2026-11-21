@@ -10,15 +10,17 @@ function fakeStorage() {
   return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => void m.set(k, String(v)) };
 }
 function fakeTimers() {
-  let id = 0; const t = new Map();
+  let id = 0; const t = new Map(); const delays = [];
   return {
-    setTimer: (fn) => { t.set(++id, fn); return id; },
+    delays,
+    setTimer: (fn, ms) => { delays.push(ms); t.set(++id, fn); return id; },
     clearTimer: (i) => void t.delete(i),
     pending: () => t.size,
     fire: () => { const fns = [...t.values()]; t.clear(); fns.forEach((f) => f()); },
   };
 }
 const tick = () => new Promise((r) => setImmediate(r));
+const kindError = (kind) => Object.assign(new Error(kind), { kind });
 
 test('throwing storage is survived', async () => {
   const bad = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
@@ -120,7 +122,7 @@ test('state saved during a failing save is retried via re-armed timer', async ()
   timers.fire(); await tick();
   p.save(st(2));
   const f = p.flush(); // cancels B's timer, waits on A
-  rel[0].rej(new Error('offline')); await f;
+  rel[0].rej(kindError('network')); await f;
   assert.equal(calls.length, 1);
   assert.equal(timers.pending(), 1, 'retry timer armed');
   timers.fire(); await tick();
@@ -170,4 +172,73 @@ test('Drive saves are serialized and coalesced', async () => {
   assert.equal(maxInflight, 1);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].updatedAt, 3);
+});
+
+test('network failures retry with a doubling wait up to 60s, reset after a success', async () => {
+  const timers = fakeTimers(); let fail = true; const calls = [];
+  const api = { saveSaved: async (s) => { calls.push(s); if (fail) throw kindError('network'); } };
+  const p = createPersistence({ storage: fakeStorage(), api, ...timers, onSyncError() {} });
+  p.save(st(1));
+  assert.deepEqual(timers.delays, [1500]);
+  for (let n = 0; n < 7; n++) { timers.fire(); await tick(); }
+  assert.equal(calls.length, 7);
+  assert.deepEqual(timers.delays, [1500, 3000, 6000, 12000, 24000, 48000, 60000, 60000]);
+  fail = false;
+  timers.fire(); await tick();
+  assert.equal(calls.length, 8);
+  assert.equal(timers.pending(), 0, 'nothing left to retry');
+  fail = true;
+  p.save(st(2));
+  timers.fire(); await tick();
+  assert.equal(timers.delays.at(-1), 3000, 'backoff starts over');
+});
+
+test('sign-in, blocked and other failures keep the state but do not retry until the next save or flush', async () => {
+  for (const kind of ['signin', 'blocked', 'other', undefined]) {
+    const timers = fakeTimers(); let fail = true; const calls = []; const errs = [];
+    const api = { saveSaved: async (s) => { calls.push(s); if (fail) throw kindError(kind); } };
+    const storage = fakeStorage();
+    const p = createPersistence({ storage, api, ...timers, onSyncError: (e) => errs.push(e.kind) });
+    p.save(st(1));
+    timers.fire(); await tick();
+    assert.equal(calls.length, 1, String(kind));
+    assert.equal(timers.pending(), 0, `${kind}: no retry timer`);
+    assert.deepEqual(errs, [kind]);
+    assert.equal(p.readCache().updatedAt, 1);
+    fail = false;
+    await p.flush();
+    assert.equal(calls.length, 2, `${kind}: flush retries`);
+    assert.equal(calls[1].updatedAt, 1);
+  }
+  // A new save also tries again.
+  const timers = fakeTimers(); const calls = [];
+  const api = { saveSaved: async (s) => { calls.push(s); if (calls.length === 1) throw kindError('signin'); } };
+  const p = createPersistence({ storage: fakeStorage(), api, ...timers, onSyncError() {} });
+  p.save(st(1)); timers.fire(); await tick();
+  p.save(st(2)); timers.fire(); await tick();
+  assert.deepEqual(calls.map((c) => c.updatedAt), [1, 2]);
+});
+
+test('load does not overwrite the cache while a save is pending or running', async () => {
+  for (const running of [false, true]) {
+    const storage = fakeStorage();
+    storage.setItem('hc.state', JSON.stringify(st(10)));
+    const timers = fakeTimers(); let release; const saves = [];
+    let releaseSave;
+    const api = {
+      loadSaved: () => new Promise((r) => { release = r; }),
+      saveSaved: (s) => { saves.push(s); return new Promise((r) => { releaseSave = r; }); },
+    };
+    const p = createPersistence({ storage, api, ...timers });
+    const loading = p.load();
+    p.save(st(20, { checks: { 'cw:1': true } }));
+    if (running) { timers.fire(); await tick(); assert.equal(saves.length, 1); }
+    release(st(15, { checks: { other: true } }));
+    const result = await loading;
+    assert.equal(result.updatedAt, 15);
+    assert.equal(p.readCache().updatedAt, 20, `running=${running}: cache keeps the tick`);
+    assert.deepEqual(p.readCache().checks, { 'cw:1': true });
+    const f = p.flush(); await tick();
+    releaseSave(); await f;
+  }
 });
