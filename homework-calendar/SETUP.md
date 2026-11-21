@@ -165,6 +165,6 @@ If the school says no, there is a fallback. Ask the student to send you their we
 3. **This week** shows Monday to Sunday. Use the arrows to see other weeks. The colors tell you what kind of thing it is: homework, a test, or an activity. Tests stand out so you can plan ahead.
 4. **Checklist** lists the things to do. Tick a box when it is done. Your ticks are saved, so they are there next time.
 5. Click **+ Add** to add something of your own. Pick **Activity**, **Test** or **Other homework**, give it a name and a date. Add a time if you like. Tick **Every week** for things like practice.
-6. Sometimes Classroom has a test but no date. The page will show an **add a date** link. Click it and pick the date so the test shows in the right place.
+6. Sometimes Classroom has a test but no date. Under **What's next** the page shows an **Add a date** section with an **Add date** button. Click it and pick the date so the test shows in the right place.
 7. Click **Refresh** to load new things from Classroom.
 8. If the page says "Showing saved info, can't reach Google right now.", you are offline. Your saved things still show. Try Refresh later.
