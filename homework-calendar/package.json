@@ -1,0 +1,1 @@
+{"name":"homework-calendar","private":true,"type":"module","scripts":{"test":"TZ=America/Los_Angeles node --test tests/*.test.js"}}
