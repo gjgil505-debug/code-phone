@@ -32,7 +32,7 @@ It must cost as close to nothing as possible to run.
 ## Anti-goals (would count as failure even if it "works")
 
 - Filler: posting a weak video just because 10 minutes passed. Skip the slot instead.
-- Videos with no credit to the streamer.
+- Videos without the streamer's tag at the bottom.
 - Hammering Twitch's API or spamming clips on a streamer's channel.
 - Anything that costs money per video.
 
@@ -115,8 +115,11 @@ Python 3.11, single asyncio process, SQLite for state. Components:
      hype → "This is actually insane", shock → "Nobody expected this"), optionally
      filled with the streamer's name. A template isn't reused within the last 10 videos.
 6. **Captions:** word-by-word burned-in subtitles (ASS, thick outline, current word
-   highlighted), placed in the lower third.
-7. **Credit:** `twitch.tv/<streamer>` shown throughout.
+   highlighted), placed in the lower third above the streamer tag.
+7. **Streamer tag:** the streamer's tag (`@<DisplayName>`, e.g. `@StreamerName`)
+   sits at the bottom centre of the frame for the whole video. It's in bold white
+   with a dark outline and a semi-transparent pill behind it, inside the platforms'
+   safe area so TikTok/Shorts buttons don't cover it. Captions sit just above it.
 8. Loudness-normalise the audio to about −14 LUFS and encode H.264/AAC at a high
    bitrate for upload.
 
