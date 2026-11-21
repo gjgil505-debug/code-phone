@@ -29,7 +29,7 @@ function dayLabel(date, now) {
 
 function titleHtml(item) {
   const t = e(item.title);
-  return item.link ? `<a href="${e(item.link)}" target="_blank" rel="noopener">${t}</a>` : t;
+  return item.link && /^https:\/\//i.test(item.link) ? `<a href="${e(item.link)}" target="_blank" rel="noopener">${t}</a>` : t;
 }
 
 function courseHtml(item) {
@@ -73,7 +73,7 @@ export function renderWeek(days, now) {
 export function renderChecklist(rows, now) {
   return rows.map(({ item, status }) => {
     const due = item.dueAt ? dayLabel(item.dueAt, now) : 'no date';
-    return `<label class="row ${status}"><input type="checkbox" data-action="check" data-id="${e(item.id)}"${item.done ? ' checked' : ''}> ` +
+    return `<label class="row ${e(status)}"><input type="checkbox" data-action="check" data-id="${e(item.id)}"${item.done ? ' checked' : ''}> ` +
       `${courseHtml(item)}<span class="title">${titleHtml(item)}</span> <span class="due">${e(due)}</span></label>`;
   }).join('');
 }

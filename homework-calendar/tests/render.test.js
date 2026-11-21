@@ -78,3 +78,20 @@ test('checklist rows and due labels', () => {
   assert.match(out, /<label class="row done"><input type="checkbox" data-action="check" data-id="f" checked>/);
   assert.match(out, /<input type="checkbox" data-action="check" data-id="a">/);
 });
+
+test('only https links become anchors', () => {
+  for (const bad of ['javascript:alert(1)', 'data:text/html,x', ' javascript:alert(1)']) {
+    const i = item({ link: bad, title: 'Plain' });
+    const outs = [
+      renderWhatsNext({ ...empty, overdue: [i] }, now),
+      renderWeek([{ date: new Date(2026, 10, 24), items: [i] }], now),
+      renderChecklist([{ item: i, status: 'open' }], now),
+    ];
+    for (const o of outs) {
+      assert.ok(!o.includes('href') && !o.includes('<a'), bad);
+      assert.ok(o.includes('Plain'));
+    }
+  }
+  const ok = renderChecklist([{ item: item({ link: 'https://x/y' }), status: 'open' }], now);
+  assert.match(ok, /<a href="https:\/\/x\/y" target="_blank" rel="noopener">/);
+});
