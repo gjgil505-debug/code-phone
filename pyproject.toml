@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clipbot"
+version = "0.1.0"
+description = "Autonomous GTA 6 hype-moment clipper that posts vertical shorts"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27",
+  "websockets>=12",
+  "PyYAML>=6",
+  "python-dotenv>=1",
+  "faster-whisper>=1.0",
+  "yt-dlp>=2024.1.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
+
+[project.scripts]
+clipbot = "clipbot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["clipbot*"]
+
+[tool.setuptools.package-data]
+clipbot = ["render/fonts/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["slow: renders real video with ffmpeg"]
